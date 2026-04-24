@@ -1,5 +1,6 @@
 ---
-name: node.yaml 字段速查
+name: node-yaml
+display_name: node.yaml 字段速查
 description: Tinia 节点清单（node.yaml）的所有字段含义 + 典型取值 + 默认行为
 user-invocable: false
 ---
@@ -79,7 +80,7 @@ inputs:
 ```
 
 **每个端口字段**：
-- `type`：类型名（见 「Tinia 类型体系」）
+- `type`：类型名（见 `types-reference`）
 - `label`：显示名
 - `default`：默认值（连线没连时注入）
 - `enabled_when`：参数 key，只有该参数为真时此端口才启用

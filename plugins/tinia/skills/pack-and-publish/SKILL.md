@@ -1,8 +1,9 @@
 ---
-name: 打包并安装插件
+name: pack-and-publish
+display_name: 打包并安装插件
 description: 开发完成后打包发布 —— 版本 +0.1、导出 .tar.gz、引导用户在 Web UI 里安装
 user-invocable: true
-allowed-tools: mcp__tinia__dev_get_project, mcp__tinia__dev_bump_version, mcp__tinia__dev_export
+allowed-tools: mcp__tinia__dev_get_project,mcp__tinia__dev_bump_version,mcp__tinia__dev_export
 ---
 
 # 打包并安装插件
@@ -42,7 +43,7 @@ dev_export(project_id)
   "filename": "my-plugin-v1.2.tar.gz",
   "size_bytes": 12345,
   "encoding": "base64",
-  "content": "H4sIAA..."   // base64 编码的 tar.gz 字节
+  "content": "H4sIAA..."
 }
 ```
 
@@ -83,5 +84,5 @@ with open("my-plugin-v1.2.tar.gz", "wb") as f:
 
 ## 相关 Skill
 
-- 命名空间讲解 → 见 docs/node-namespace-design.md
-- tinia-repo.yaml 的 namespace/table_prefix 字段 → 「tinia-repo.yaml 字段速查」
+- 命名空间讲解 → 见 `tinia-repo-yaml`
+- tinia-repo.yaml 的 namespace/table_prefix 字段 → `tinia-repo-yaml`

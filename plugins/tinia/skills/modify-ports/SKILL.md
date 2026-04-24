@@ -1,8 +1,9 @@
 ---
-name: 修改节点端口与参数
+name: modify-ports
+display_name: 修改节点端口与参数
 description: 给现有节点增/改/删端口或参数时的兼容性注意事项
 user-invocable: true
-allowed-tools: mcp__tinia__dev_read_file, mcp__tinia__dev_write_file, mcp__tinia__dev_reload, mcp__tinia__nodes_describe
+allowed-tools: mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__nodes_describe
 ---
 
 # 修改节点端口与参数
@@ -61,7 +62,7 @@ if mask_handle:
   "new_param": {
     "type": "number",
     "title": "新参数",
-    "default": 0   // ← 必须有 default，旧流程的 params 没这个字段也能工作
+    "default": 0
   }
 }
 ```
@@ -108,6 +109,6 @@ run.py 里也记得 emit_output 新端口（不 emit 会让下游"没东西能�
 
 ## 相关 Skill
 
-- 类型选型 → 「Tinia 类型体系」
-- 字段完整定义 → 「node.yaml 字段速查」
-- 测试改动 → 用 `dev_reload` + 「调试节点运行错误」
+- 类型选型 → `types-reference`
+- 字段完整定义 → `node-yaml`
+- 测试改动 → `dev_reload` + `debug-node`

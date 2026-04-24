@@ -1,8 +1,9 @@
 ---
-name: 调试节点运行错误
+name: debug-node
+display_name: 调试节点运行错误
 description: dev_reload 失败或节点测试出错时的排查流程
 user-invocable: true
-allowed-tools: mcp__tinia__dev_reload, mcp__tinia__dev_tail_logs, mcp__tinia__dev_read_file, mcp__tinia__dev_write_file, mcp__tinia__dev_tree, mcp__tinia__nodes_describe
+allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
 ---
 
 # 调试节点运行错误
@@ -74,6 +75,6 @@ run.py 可能没调 `rt.emit_done()` 就退出了。加上。
 
 ## 相关 Skill
 
-- 节点字段不对 → 「node.yaml 字段速查」
-- SDK 方法用错 → 「Tinia SDK 参考」
-- 节点端口重新设计 → 「修改节点端口与参数」
+- 节点字段不对 → `node-yaml`
+- SDK 方法用错 → `sdk-reference`
+- 节点端口重新设计 → `modify-ports`

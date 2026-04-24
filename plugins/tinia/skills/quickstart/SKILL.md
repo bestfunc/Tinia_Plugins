@@ -1,8 +1,9 @@
 ---
-name: 快速上手 Tinia 插件开发
+name: quickstart
+display_name: 快速上手 Tinia 插件开发
 description: 从零开始建项目、加节点、写 run.py、测试并发布的完整流程示例
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects, mcp__tinia__dev_create_project, mcp__tinia__dev_create_node, mcp__tinia__dev_read_file, mcp__tinia__dev_write_file, mcp__tinia__dev_reload, mcp__tinia__dev_bump_version, mcp__tinia__dev_export, mcp__tinia__nodes_list_types, mcp__tinia__nodes_list
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__dev_bump_version,mcp__tinia__dev_export,mcp__tinia__nodes_list_types,mcp__tinia__nodes_list
 ---
 
 # 快速上手 Tinia 插件开发
@@ -47,7 +48,7 @@ allowed-tools: mcp__tinia__dev_list_projects, mcp__tinia__dev_create_project, mc
 - 骨架里有 TODO 注释，按用户需求改
 - 注意：节点运行时通过 stdin 接收 `{inputs, params}`，用 `rt.fetch_blob(handle)` 拿数据，用 `rt.emit_output("result", handle)` 发输出
 - 需要新依赖（如 `librosa / scipy`）要加到 `runtime/requirements.txt`
-- 详细 SDK 用法见 「Tinia SDK 参考」skill
+- 详细 SDK 用法见 「sdk-reference」skill
 
 ### 6. 测试
 
@@ -56,7 +57,7 @@ allowed-tools: mcp__tinia__dev_list_projects, mcp__tinia__dev_create_project, mc
 
 ### 7. 如果 reload 失败
 
-跳转到 「调试节点运行错误」 skill。
+跳转到 「debug-node」 skill。
 
 ### 8. 满意后发布
 

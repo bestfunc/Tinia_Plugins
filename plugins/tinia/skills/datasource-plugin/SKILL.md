@@ -1,8 +1,9 @@
 ---
-name: 开发数据源插件
+name: datasource-plugin
+display_name: 开发数据源插件
 description: 用 datasource_plugin 模板开发一个接入外部数据源的 Tinia 插件（凭证 + 数据源 + 迁移 + UI）
 user-invocable: true
-allowed-tools: mcp__tinia__dev_create_project, mcp__tinia__dev_read_file, mcp__tinia__dev_write_file, mcp__tinia__dev_reload, mcp__tinia__dev_list_projects
+allowed-tools: mcp__tinia__dev_create_project,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__dev_list_projects
 ---
 
 # 开发数据源插件
@@ -58,10 +59,10 @@ acme-data/
 CREATE TABLE IF NOT EXISTS plg_acme_credentials (
     id          SERIAL PRIMARY KEY,
     owner_id    INTEGER NOT NULL,
-    org_id      INTEGER,                    -- 用来做组织内共享（推荐）
+    org_id      INTEGER,
     name        VARCHAR(255) NOT NULL,
     type        VARCHAR(50) NOT NULL DEFAULT 'acme_api',
-    data        TEXT NOT NULL DEFAULT '{}', -- 凭证字段的 JSON
+    data        TEXT NOT NULL DEFAULT '{}',
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -106,7 +107,6 @@ if not (host and token):
     print(json.dumps({"success": False, "error": "host 和 token 必填"}))
     sys.exit(0)
 
-# 实际 ping 一下远端
 try:
     r = urllib.request.Request(f"{host}/api/ping",
                                headers={"Authorization": f"Bearer {token}"})
@@ -127,7 +127,6 @@ stdout: `{"items": [...], "total": N}`
 import json, sys
 req = json.loads(sys.stdin.read())
 q = req.get("query", {})
-# 调外部 API …
 items = [
     {"id": "1", "name": "sample.wav", "media_type": "audio/wav",
      "content_url": "https://acme.example.com/data/1.wav"}
@@ -181,5 +180,5 @@ dev_reload(project_id)
 
 ## 相关 Skill
 
-- tinia-repo.yaml modules 字段 → 「tinia-repo.yaml 字段速查」
-- 选模板 → 「从模板开始」
+- tinia-repo.yaml modules 字段 → `tinia-repo-yaml`
+- 选模板 → `pick-template`

@@ -1,0 +1,20 @@
+{
+  "name": "tinia",
+  "description": "Tinia 声学数据分析平台的 AI 开发助手：11 个 skill + OAuth 自动授权的 MCP connector。让 Claude / Codex / Qwen CLI 帮你完成 Tinia 插件项目的创建、节点脚手架、编写 run.py、调试、打包发布全流程。",
+  "version": "1.0.0",
+  "author": {
+    "name": "Bestfunc Technology",
+    "email": "Great@bestfunc.com"
+  },
+  "homepage": "https://tinia.bestfunc.com",
+  "repository": "https://github.com/bestfunc/Tinia_Plugins",
+  "license": "Apache-2.0",
+  "keywords": ["tinia", "mcp", "acoustic", "data-analysis", "plugin-dev", "node-graph"],
+  "mcpServers": {
+    "tinia": {
+      "type": "http",
+      "url": "https://tinia.bestfunc.com/api/v1/mcp",
+      "httpUrl": "https://tinia.bestfunc.com/api/v1/mcp"
+    }
+  }
+}

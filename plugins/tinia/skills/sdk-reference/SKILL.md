@@ -1,5 +1,6 @@
 ---
-name: Tinia SDK 参考
+name: sdk-reference
+display_name: Tinia SDK 参考
 description: tinia_runtime.Runtime 所有方法的完整参考 —— run.py 里必须用的 API
 user-invocable: false
 ---

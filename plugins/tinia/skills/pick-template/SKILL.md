@@ -1,5 +1,6 @@
 ---
-name: 从模板开始
+name: pick-template
+display_name: 从模板开始
 description: Tinia Developer Studio 的 4 个项目模板各自生成什么、适合什么场景、怎么选
 user-invocable: false
 ---
@@ -76,7 +77,7 @@ project/
 
 **典型例子**：Diffgram 标注系统接入（`Tinia_nodes_diffgram`）、LIMS 系统接入、阿里云 OSS 桶接入…
 
-详细见「开发数据源插件」skill。
+详细见 `datasource-plugin` skill。
 
 ## `empty` — 完全自定义
 

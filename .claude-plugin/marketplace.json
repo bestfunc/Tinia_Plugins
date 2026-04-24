@@ -1,0 +1,18 @@
+{
+  "name": "tinia-plugins",
+  "owner": {
+    "name": "Bestfunc Technology",
+    "email": "Great@bestfunc.com"
+  },
+  "metadata": {
+    "description": "Tinia 声学数据分析平台的 Claude Code plugin 市场。",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "tinia",
+      "source": "./plugins/tinia",
+      "description": "Tinia 一站式接入：11 个 AI skill + OAuth 自动授权的 MCP connector。覆盖插件项目管理、节点脚手架生成、类型体系查询、调试、打包发布等开发场景。"
+    }
+  ]
+}

@@ -1,8 +1,9 @@
 ---
-name: 创建 Tinia 节点
+name: create-node
+display_name: 创建 Tinia 节点
 description: 在现有 Tinia 插件项目里添加一个 Python 节点，生成骨架并实现 run.py
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects, mcp__tinia__dev_list_nodes, mcp__tinia__dev_create_node, mcp__tinia__dev_read_file, mcp__tinia__dev_write_file, mcp__tinia__dev_reload, mcp__tinia__nodes_list_types
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list_types
 ---
 
 # 创建 Tinia 节点
@@ -121,7 +122,7 @@ Tinia reload 时会自动 `pip install -r requirements.txt`。
 dev_reload(project_id)
 ```
 
-返回 `status: ok, node_count: N` 即成功。失败就看 error 字段，或走「调试节点运行错误」skill。
+返回 `status: ok, node_count: N` 即成功。失败就看 error 字段，或走 `debug-node` skill。
 
 成功后告诉用户：
 > 已注册到你的个人命名空间 `{namespace}/{key}`。打开 Tinia Web UI 流程编辑器，节点面板里会看到一个带 DEV 标签的条目。拖到画布上连线，点 Run 看结果。
@@ -136,7 +137,7 @@ dev_reload(project_id)
 
 ## 相关 Skill
 
-- 端口类型选型 → 「Tinia 类型体系」
-- SDK 方法详情 → 「Tinia SDK 参考」
-- node.yaml 字段 → 「node.yaml 字段速查」
-- 测试失败 → 「调试节点运行错误」
+- 端口类型选型 → `types-reference`
+- SDK 方法详情 → `sdk-reference`
+- node.yaml 字段 → `node-yaml`
+- 测试失败 → `debug-node`
