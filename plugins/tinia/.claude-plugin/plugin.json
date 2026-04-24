@@ -13,8 +13,8 @@
   "mcpServers": {
     "tinia": {
       "type": "http",
-      "url": "https://tinia.bestfunc.com/api/v1/mcp",
-      "httpUrl": "https://tinia.bestfunc.com/api/v1/mcp"
+      "url": "http://localhost:18722/api/v1/mcp",
+      "httpUrl": "http://localhost:18722/api/v1/mcp"
     }
   }
 }

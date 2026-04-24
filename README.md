@@ -43,8 +43,26 @@ Tinia_Plugins/
 
 ### 前置条件
 
-1. 一个 Tinia 账号（公网 `tinia.bestfunc.com` 或私有化部署的 Tinia）
+1. 一个 Tinia 实例（本地 dev / 公司私有化 / 或未来的公网 `tinia.bestfunc.com`）
 2. 你的账号所在用户组里，超管已经为你开启了 `mcp:dev` 和 `mcp:nodes` 模块（在「系统设置 → 用户组模版」里）
+
+### ⚠️ 当前 plugin.json 默认指向本地 dev
+
+`plugins/tinia/.claude-plugin/plugin.json` 里 `mcpServers.tinia.url` 目前写的是：
+
+```
+http://localhost:18722/api/v1/mcp
+```
+
+这是 Tinia 开发模式的 Vite dev 端口（`./start-dev.sh` 启动后使用）。
+**要用你自己的 Tinia 实例，请修改这个 URL**：
+
+| 场景 | URL |
+|---|---|
+| 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp`（默认） |
+| 本地桌面模式（`tinia --desktop`） | `http://localhost:18720/api/v1/mcp` |
+| 公司私有化部署 | `https://tinia.your-company.com/api/v1/mcp` |
+| 未来 Tinia 公网 | `https://tinia.bestfunc.com/api/v1/mcp` |
 
 ### Claude Code
 
@@ -53,15 +71,11 @@ Tinia_Plugins/
 /plugin install tinia@tinia-plugins
 ```
 
-首次使用时 Claude 会打开浏览器，跳转到 `https://tinia.bestfunc.com/oauth/authorize`，用 Tinia 账号登录并点「允许」即可。
+首次使用时 Claude 会打开浏览器跳到 Tinia 的 `/oauth/authorize` 页面，用 Tinia 账号登录并点「允许」即可。
 
 ### Codex / Qwen CLI
 
 把 `plugins/tinia/.claude-plugin/plugin.json` 里的 `mcpServers.tinia` 条目复制到你的客户端配置文件（每个 CLI 位置略有不同，参考各自文档）。OAuth 流程是标准 MCP 规范，兼容所有支持 MCP 2024-11-05 协议的客户端。
-
-### 私有化部署
-
-如果你的组织自己部署了 Tinia Server，修改 `plugins/tinia/.claude-plugin/plugin.json` 里的 `url` 字段指向你的内网地址即可（如 `https://tinia.internal.company.com/api/v1/mcp`）。
 
 ## Skills 概览
 
