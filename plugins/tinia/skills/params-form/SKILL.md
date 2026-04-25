@@ -38,23 +38,29 @@ return (
 
 ---
 
-## ⚠ 写之前必读：官方风格参考
+## 🚨 第一条铁律：写之前必照抄官方实现
 
-**ParamsForm 的视觉风格在 Tinia 主应用是有强约定的**。AI 自己凭空写很容易"画风跑偏" —— 比如把节点说明写成长篇大论的顶部说明区、堆叠多层折叠面板、用彩色方块做按钮组，这些都**不符合**主应用风格。
-
-**正确做法**：写 `ui/ParamsForm.tsx` 之前，先用 `nodes_read_source` 读一个**类型相似的官方节点**的实现做参考：
+**Tinia 主应用对 ParamsForm 视觉有强约定**（扁平结构 / 原生 label + 控件 / 主应用 Tailwind token），文档说不清楚，**直接读官方源码 30 秒就懂**。
 
 ```
-nodes_list({namespace: "bestfunc"})              → 找相似节点
-nodes_describe(key)                               → 看 source_files 列表
-nodes_read_source(key, "ui/ParamsForm.tsx")       → 抄风格、抄结构
+nodes_list({namespace: "bestfunc"})              # 找一个跟你节点类型相似的官方节点
+nodes_describe(key)                               # 看 source_files 列表
+nodes_read_source(key, "ui/ParamsForm.tsx")       # 抄风格、抄结构
 ```
 
-**官方风格关键约束**：
-- **不写"顶部长说明"** —— 节点描述走 ⓘ 帮助按钮（点击弹模态弹窗），不在表单里堆文字
-- **不堆叠折叠面板** —— 简洁的字段列表 + 输入控件即可
-- **复用主应用 Tailwind token**：`bg-card / border-border / text-text-primary / text-text-secondary / text-text-muted` 等，**不要自定义 hex 颜色**
-- 控件统一用本 skill"常用控件速查"里的写法
+参考官方节点：
+- 写 analyzer 类  → 读 `bestfunc/level_meter` / `fft_spectrum`
+- 写 transform 类 → 读 `bestfunc/filter_node` / `convergent_trim`
+- 写 source 类    → 读 `bestfunc/dataset_node`
+
+**违反后果**（不是建议，是事实）：
+- ❌ 自创 `<Section>` `<Field>` `<Card>` 包装组件 → **用户必让重写**
+- ❌ 顶部写长篇节点说明 / 设计原理 → 节点说明走流程编辑器 ⓘ 帮助按钮，**不在表单里写文字** → **用户必让重写**
+- ❌ 堆叠多层折叠面板（"基础参数 / 高级参数 / 输出指标" 这种）→ **用户必让重写**
+- ❌ 自定义彩色按钮组（彩色方块选项）→ 用主应用统一的 `<select>` / `<input type="checkbox">` → **用户必让重写**
+- ❌ 自定义 hex 颜色（`#3b82f6` 等）→ 主题切换不跟随 → **用户必让重写**
+
+**正确做法 = 抄官方扁平结构 + 改业务字段**。即使你的节点有 18 个参数，**也是扁平排列**，最多用 `<details>` 微折叠（参考下方"完整示例"段的 sample_node）。
 
 ---
 

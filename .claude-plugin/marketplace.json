@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Tinia 声学数据分析平台的 Claude Code plugin 市场。",
-    "version": "1.1.5"
+    "version": "1.1.6"
   },
   "plugins": [
     {
       "name": "tinia",
       "source": "./plugins/tinia",
-      "description": "Tinia 一站式接入：12 个 AI skill + OAuth 自动授权的 MCP connector。覆盖插件项目管理、节点脚手架生成、类型体系查询、搭建测试流程、调试、打包发布等开发场景。"
+      "description": "Tinia 一站式接入：13 个 AI skill + OAuth 自动授权的 MCP connector。覆盖插件项目管理、节点脚手架生成、类型体系查询、搭建测试流程、调试、打包发布等开发场景。"
     }
   ]
 }
