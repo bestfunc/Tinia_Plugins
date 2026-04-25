@@ -3,10 +3,42 @@ name: debug-node
 display_name: 调试节点运行错误
 description: dev_reload 失败或节点测试出错时的排查流程
 user-invocable: true
-allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
+allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_build_status,mcp__tinia__dev_build_history,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
 ---
 
 # 调试节点运行错误
+
+## ⚠ 工具职责必须分清（v1.19 引入新工具后）
+
+| 工具 | 干什么 | 耗时 | 何时用 |
+|---|---|---|---|
+| `dev_reload` | 重装 Python venv（装 requirements.txt）+ 重新注册 node.yaml + 编译 ui/*.tsx | 可能几十秒到几分钟（pip install 慢）| **改了 run.py / node.yaml / requirements.txt / tinia-repo.yaml 必须用** |
+| `dev_compile` | 只编译 ui/*.tsx 一个文件几毫秒 | < 1s | 改了 ui/ParamsForm.tsx / Viewer.tsx 等纯前端时；快速验证 UI 编译 |
+| `dev_build_status` | 查最近一次编译结果 | 即时 | 想知道 UI 是否编译通过、错在哪一行 |
+| `dev_build_history` | 列最近 N 次编译摘要 | 即时 | 回看历史 |
+
+### 三条铁律
+
+1. **dev_compile 不能替代 dev_reload**。如果你改了 Python 代码 / 节点 yaml / 依赖，只调 dev_compile 是不会让节点生效的 —— 用户测试时会发现节点行为没变化。
+2. **dev_reload 报错不要"绕开"**。pip install 卡住、依赖装不上、yaml 解析失败 —— 这些是真正需要解决的问题。**先告诉用户报错内容**，让用户决定是等、改依赖、还是排查网络，而不是切换到 dev_compile 假装一切正常。
+3. **dev_reload 已经包含 dev_compile**。dev_reload 末尾会顺带编译 UI。所以你不需要在 reload 之后再调 compile —— 看 reload 返回体的 `build` 字段就有完整编译结果。
+
+### 实战决策流
+
+```
+用户改了什么？
+├─ 只改 ui/*.tsx → dev_compile
+├─ 改了 run.py / node.yaml / requirements.txt / tinia-repo.yaml → dev_reload
+└─ 不确定 → dev_reload（保险）
+
+dev_reload 报错？
+├─ 网络/超时类（pip 拉不下来包）→ 告诉用户原始错误，让用户决定是否重试 / 换源
+├─ 语法错误（yaml/python 语法）→ 修代码再 reload
+├─ 依赖缺失（缺包名）→ 检查 requirements.txt，更新后再 reload
+└─ 不要切到 dev_compile 假装绕过 ❌
+```
+
+---
 
 ## 错误分两类
 
