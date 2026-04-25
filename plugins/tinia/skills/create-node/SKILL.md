@@ -120,8 +120,11 @@ Tinia 平台对节点 UI 有**强烈的视觉风格约定**（圆角、配色、
 **官方 Viewer 风格关键点**：
 - **左右布局**：左侧 item 列表（按 item_id/name 选择）+ 右侧主视图
 - 主视图按数据特征支持多视图切换（层叠 / 平铺 / 竖铺 / 卡片 / 3D），由用户选
+- 时序数据用 `uplot`、复杂图表用 `echarts`、表格用原生 `<table>`，**不要手画 div 柱状图**
 - 所有标题、按钮、卡片复用主应用 token（`text-text-primary` / `bg-card` / `border-border` 等）
 - **不要自己定义颜色 hex** —— 全部用 Tailwind token
+
+**详细的 Viewer 模板和反模式见 `tinia:result-view` skill**（按数据类型分别给完整模板：IndicatorData / FeatureMatrix / AnomalyResult / AudioData 等）。写 Viewer 之前**必看**那个 skill。
 
 #### Viewer.tsx 标准模板（推荐：preview-first）
 
