@@ -3,7 +3,7 @@ name: quickstart
 display_name: 快速上手 Tinia 插件开发
 description: 从零开始建项目、加节点、写 run.py、测试并发布的完整流程示例
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__dev_bump_version,mcp__tinia__dev_export,mcp__tinia__nodes_list_types,mcp__tinia__nodes_list
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__dev_bump_version,mcp__tinia__dev_export,mcp__tinia__nodes_list_types,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_read_source
 ---
 
 # 快速上手 Tinia 插件开发
@@ -27,6 +27,21 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp_
 - **项目名**：英文，不含空格 / 特殊字符，如 `acoustic-tools`
 - **节点 key**：英文小写+下划线，如 `level_meter`
 - **输入输出类型**：调 `nodes_list_types` 看可选值，别瞎编
+
+### 2.5. 【必做】先读官方相似节点的源码
+
+> ⚠ 跳过这步，写出来的 ParamsForm / Viewer **几乎一定**风格不一致，用户大概率会让重写。
+
+```
+nodes_list({namespace: "bestfunc"})              # 找类型相似的官方节点
+nodes_describe(选中的 key)                       # 看 source_files
+nodes_read_source(key, "ui/ParamsForm.tsx")      # 抄风格
+nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx
+nodes_read_source(key, "node.yaml")              # 学官方 node.yaml 怎么组织
+nodes_read_source(key, "runtime/run.py")         # 学 SDK 调用习惯（不抄业务逻辑）
+```
+
+详见「create-node」skill 的步骤 0。
 
 ### 3. 创建 & 生成骨架
 

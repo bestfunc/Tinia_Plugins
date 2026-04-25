@@ -3,12 +3,35 @@ name: create-node
 display_name: 创建 Tinia 节点
 description: 在现有 Tinia 插件项目里添加一个 Python 节点，生成骨架并实现 run.py
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list_types
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__nodes_read_source
 ---
 
 # 创建 Tinia 节点
 
 ## 流程
+
+### 0. 【必做】先读官方相似节点的源码学风格
+
+> ⚠ **跳过这步几乎必然写出风格不一致的 UI**。Tinia 主应用对节点视觉有强约定 ——
+> 顶部不写长篇说明、不堆叠折叠面板、左右布局视图、用主应用 Tailwind token，
+> 这些规则文档说不清楚，直接读源码 30 秒就懂。
+
+按你即将写的节点类型，**至少读一个官方节点的 ParamsForm + Viewer 实现**：
+
+```
+nodes_list({namespace: "bestfunc"})              # 找类型相似的节点
+  - analyzer 类  → 读 level_meter / fft_spectrum
+  - transform 类 → 读 filter_node / convergent_trim
+  - viewer 类    → 读 indicator_viewer / spectrum_viewer
+  - source 类    → 读 dataset_node / materialize_node
+
+nodes_describe(选中的 key)                       # 看 source_files 列表
+nodes_read_source(key, "ui/ParamsForm.tsx")      # 抄风格、抄结构
+nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx
+nodes_read_source(key, "node.yaml")              # 顺带看官方 node.yaml 怎么组织
+```
+
+读完再开始下面的步骤。**不读直接写 = 用户大概率会让你重写**。
 
 ### 1. 确认上下文
 
@@ -71,6 +94,34 @@ dev_create_node(project_id, key, with_viewer=false)
 **优先级**：
 1. `preview` 非空 → 直接用，零额外请求
 2. `preview` 空或 `truncated=true` → fetch `url`
+
+#### ⚠ 写 UI 前**必须**先读官方参考实现
+
+Tinia 平台对节点 UI 有**强烈的视觉风格约定**（圆角、配色、按钮样式、表单组件、详情视图布局）。
+你自己凭空写出来的 ParamsForm / Viewer **几乎一定不符合**主应用风格 —— 用户会觉得"这个节点画风跟其他节点不一样"。
+
+**写 UI 前**：
+
+```
+1. nodes_list({namespace: "bestfunc"})  → 找一个跟你正在写的节点**类型相似**的官方节点
+   - 写 analyzer  → 找 level_meter / fft_spectrum / wavelet_transform
+   - 写 transform → 找 filter_node / convergent_trim
+   - 写 viewer    → 找 indicator_viewer / spectrum_viewer
+2. nodes_describe(key)                   → 看 source_files 列表（含 ui/*.tsx）
+3. nodes_read_source(key, "ui/ParamsForm.tsx")  → 看官方表单怎么布局
+4. nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx → 看官方视图怎么布局
+```
+
+**官方 ParamsForm 风格关键点**（看了源码就明白）：
+- **不要自己写超长说明** —— 每个节点参数面板顶部有内置的节点名 + 描述区，节点说明走 ⓘ 帮助按钮（点击弹弹窗）
+- **不要堆叠折叠面板** —— 简洁的字段+输入控件即可，必要时用 `<details>` 微折叠
+- **不要自定义彩色按钮组** —— 用主应用统一的 input/select/checkbox
+
+**官方 Viewer 风格关键点**：
+- **左右布局**：左侧 item 列表（按 item_id/name 选择）+ 右侧主视图
+- 主视图按数据特征支持多视图切换（层叠 / 平铺 / 竖铺 / 卡片 / 3D），由用户选
+- 所有标题、按钮、卡片复用主应用 token（`text-text-primary` / `bg-card` / `border-border` 等）
+- **不要自己定义颜色 hex** —— 全部用 Tailwind token
 
 #### Viewer.tsx 标准模板（推荐：preview-first）
 
