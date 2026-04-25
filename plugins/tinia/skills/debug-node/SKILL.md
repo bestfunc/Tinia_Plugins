@@ -20,8 +20,32 @@ allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_bu
 ### 三条铁律
 
 1. **dev_compile 不能替代 dev_reload**。如果你改了 Python 代码 / 节点 yaml / 依赖，只调 dev_compile 是不会让节点生效的 —— 用户测试时会发现节点行为没变化。
-2. **dev_reload 报错不要"绕开"**。pip install 卡住、依赖装不上、yaml 解析失败 —— 这些是真正需要解决的问题。**先告诉用户报错内容**，让用户决定是等、改依赖、还是排查网络，而不是切换到 dev_compile 假装一切正常。
+2. **dev_reload 报错不要"绕开"**。yaml 解析失败、依赖错误、migration 失败 —— 这些是真正需要解决的问题。**先告诉用户报错内容**，让用户决定怎么办，而不是切换到 dev_compile 假装一切正常。
 3. **dev_reload 已经包含 dev_compile**。dev_reload 末尾会顺带编译 UI。所以你不需要在 reload 之后再调 compile —— 看 reload 返回体的 `build` 字段就有完整编译结果。
+
+### `dev_reload` "streaming HTTP 错误"的诊断
+
+如果 MCP 客户端报 `streaming HTTP error` / `connection closed` / `request timeout`，**不一定**是服务端失败。reload 是同步任务，server 端可能已经完成但响应没传回客户端（客户端 HTTP/MCP 超时）。
+
+**不要瞎猜原因**（"可能是 pip install 卡住"是常见误判 —— dev_reload 不会触发 pip install，pip install 只在节点真正运行时才发生）。
+
+**正确做法**：服务端是否实际完成，用三个独立信号判断：
+
+| 信号 | 工具 | 判断 |
+|---|---|---|
+| UI 是否已编译 | `dev_build_status(project_id)` | 返回最近一次 build，status=ok 说明 reload 已经走到末尾的 Compile 步骤，节点注册大概率也成功了 |
+| 节点是否注册到 namespace | `nodes_list(namespace=<your_ns>)` | 看新节点是否在列表里 |
+| 用户在 Web UI 流程编辑器节点面板能否找到 | （让用户验证）| 最直接证据 |
+
+如果三者都说"完成了"，告诉用户"客户端报错但服务端已成功"。如果服务端确实没完成，再分析后端日志。
+
+### 慢 reload 怎么办
+
+reload 一般 < 2 秒。如果反复超时：
+- 项目特别大（几十个节点）→ 正常，等
+- 第一次有 migration → 可能跑 SQL，有时较慢
+- yaml 解析卡死 → 让用户去 server 终端看日志
+- **不要重复 reload**：可能服务端正在跑，重复请求只会让锁等待
 
 ### 实战决策流
 
