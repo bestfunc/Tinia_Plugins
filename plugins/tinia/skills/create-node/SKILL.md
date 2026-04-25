@@ -40,6 +40,76 @@ dev_create_node(project_id, key, with_viewer=false)
 
 `with_viewer=true` 时会同时生成 `ui/Viewer.tsx`，对应 analysis_node 模板风格。没特殊需求用默认 false。
 
+#### Viewer.tsx vs ViewerLoader.tsx —— 写哪个
+
+节点的"运行结果视图"在两种文件之间二选一（**不要两个都写**）：
+
+| 文件 | 何时用 | Props |
+|---|---|---|
+| `ui/Viewer.tsx` | **默认选择**：节点输出一种视图就够了（柱状图 / 表格 / 文本 / 单一图表） | `({ runId, nodeId, outputs })` |
+| `ui/ViewerLoader.tsx` | 节点要根据用户选择**切换多种视图**（如指标查看器：列表 / 时序图 / 频谱图 三选一） | `({ runId, nodeId, outputs, nodeParams })` —— 自己 lazy load 子 viewer |
+
+**规则**：
+- 大部分新节点只需要 `Viewer.tsx`。前端会自动尝试 `viewer_loader` → fallback 到 `viewer`，所以**只写 `Viewer.tsx`** 完全 OK
+- 不要两个都写 —— 两个都存在时前端优先用 ViewerLoader，Viewer 永远不被加载
+- 不要为了"以后可能加多视图"提前写 ViewerLoader。需要时再加
+
+#### outputs[] 字段（必看）
+
+`Viewer.tsx` / `ViewerLoader.tsx` 收到的 `outputs` 是数组，**每一项的字段**：
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `port_key` | string | 输出端口 key（如 `result`） |
+| `type` | string | 类型 Kind（如 `Json`、`AudioData`） |
+| `preview` | any | **首选**：小数据（< 64KB）后端已解析后直接给你的 JSON 对象，**不需要 fetch** |
+| `url` | string | NodeOutputBlob 的 URL（带 `?token=` query），**fetch 直接拿原始 blob 内容** |
+| `size_bytes` | number | 原始大小 |
+| `truncated` | bool | true = preview 是结构摘要（不是完整数据），需走 url |
+| `blob_uri` | string | 内部 minio:// URI，前端**不要**直接用 |
+
+**优先级**：
+1. `preview` 非空 → 直接用，零额外请求
+2. `preview` 空或 `truncated=true` → fetch `url`
+
+#### Viewer.tsx 标准模板（推荐：preview-first）
+
+```tsx
+import { useEffect, useState } from 'react'
+
+interface ResultPayload {
+  // 你的节点输出 JSON 形状
+}
+
+export default function Viewer({ outputs }: { runId: string; nodeId: string; outputs: any[] }) {
+  const [data, setData] = useState<ResultPayload | null>(null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    const out = outputs.find((o: any) => o.port_key === 'result')   // 'result' 是你的输出端口 key
+    if (!out) { setError('未找到 result 端口输出'); return }
+    // 优先用 preview（无需 fetch）；preview 是结构摘要时（truncated=true）走 url
+    if (out.preview && !out.truncated) {
+      setData(out.preview)
+      return
+    }
+    fetch(out.url).then((r) => r.json()).then(setData).catch((e) => setError(String(e)))
+  }, [outputs])
+
+  if (error) return <div className="p-4 text-sm text-danger">加载错误：{error}</div>
+  if (!data) return <div className="p-4 text-sm text-text-muted">加载中...</div>
+
+  return <div>...</div>
+}
+```
+
+#### 易错点
+
+- **绝对不要用 `out.url` 之外的字段去 fetch**。`out.blob_uri` 是 `minio://` 协议，浏览器不能直接访问
+- **大小写敏感**：文件名必须是 `Viewer.tsx`（V 大写）。`viewer.tsx` 不会被 build 系统识别为 target
+- 用户如果只看几个数字 / 一个图表，**99% 用 `preview` 就够**，不用 fetch
+- 只有处理音频文件 / 大数据集 / 二进制内容时才用 `fetch(out.url)`
+
 ### 4. 改 node.yaml
 
 读回 `nodes/<key>/node.yaml`，按第 2 步的规格改：

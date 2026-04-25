@@ -98,19 +98,29 @@ project/
 ## 选型决策树
 
 ```
-你要做什么？
+AI 自动开发（默认场景）
 │
-├─ 添加一个分析节点（做 FFT / 声级 / 异常检测 等）
-│  ├─ 结果是几个数字或简单列表 → basic_node
-│  └─ 结果需要可视化（图表 / 播放器） → analysis_node
+├─ 数据源插件 → datasource_plugin（这个模板的 example 是必需的脚手架，不算冗余）
 │
-├─ 接入一个外部数据系统 → datasource_plugin
-│
-└─ 其他（模板分发 / 非常规） → empty
+└─ 其它所有节点（分析 / FFT / 声级 / 视图等）
+   → empty（AI 用 dev_create_node scaffold 节点骨架，不带 example）
 ```
 
-## 建议
+## 为什么 AI 默认用 empty
 
-- **第一次做**：用 basic_node。跑通全流程后再考虑高级需求
-- **想做数据源**：先看 Tinia_nodes_diffgram 的源码，模仿它的结构
-- **不确定**：先建 empty 再手动加文件，不如直接 basic_node 改造
+basic_node / analysis_node 模板会**自带一个 example 节点**（默认 `bestfunc/level_meter` 风格的样例代码）。AI 一旦用了这种模板，就要花精力**判断哪些是 example 残留 → 删除**。常见的失败模式：
+- example 节点的 schemas/params.schema.json / runtime/run.py 留在项目里没删，用户安装后看到莫名其妙的"示例节点"
+- example 的 ui/Viewer.tsx 还在但功能跟用户要的节点完全无关
+
+**正确做法**：
+1. `dev_create_project(template_type="empty")` —— 项目里只有干净的 `tinia-repo.yaml`
+2. `dev_create_node(key="<用户要的节点名>")` —— scaffold 一个**专属**节点骨架
+3. 按需求改 node.yaml / run.py / Viewer.tsx
+
+## 何时才用模板（用户明确指定时）
+
+- **用户说"建个示例项目让我看看结构"** → basic_node
+- **用户说"我要做数据源插件"** → datasource_plugin（这个 example 内容是脚手架本身，必需）
+- **用户说"我要带视图的分析节点示例"** → analysis_node
+
+否则一律 empty。

@@ -90,7 +90,32 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 - **数据源 id 必须从 `datasource_list` 里取**，**不能猜数字**。猜了用户跑流程必然失败。
 - **节点 class_type 必须用 full_key**（`bestfunc/level_meter` 不是 `level_meter`），用裸 key 后端会 fallback 到 bestfunc 但模糊，AI 应明确。
 - **flow_run 是异步**：返回 run_id 后必须轮询 `flow_run_status`，看到 `completed` / `failed` / `cancelled` 才算结束。中途别假设它做完了。
-- **节点位置不要纠结**：默认布局 (200 + i*180, 200) 已够用；不要为了"美观"频繁调用 set_position（且目前没这个工具，位置在 add_node 时定）。
+- **节点位置不要传 x/y**：后端会自动避让已有节点找空白格摆放。除非用户明确指定坐标，否则 `flow_add_node` 不要带 x / y。
+
+## 操作节奏（用户视觉跟随）
+
+前端给 AI 操作做了视觉加成，AI 不需要为了"让用户看清"而手动 sleep：
+
+| 你做 | 用户视觉 |
+|---|---|
+| `flow_add_node` 添加节点 | 画布上先出现一个**蓝色虚线占位框**（"AI 创建中…"），1.5 秒后渐入真节点 |
+| 一次性 `flow_add_node` 多个节点 | 多个占位框一起出现 → 一起渐入，看起来像批量加载 |
+| `flow_connect` 连线 | 画布立即出线 |
+| 任何 flow_* 工具 | 画布顶部出现"AI 正在编辑此流程"绿色提示条 + 全画布光晕脉冲；2 秒无新操作后淡出 |
+
+**建议节奏**：
+- 添加节点和连线**可以紧凑批量**，前端动画会让用户觉得"过程感"刚好
+- **不要**在两次 `flow_add_node` 之间无意义地等待 / 调闲工具拖时间 —— 前端已经给你"减速"了
+- 但**搭完整套流程后，flow_run 之前**适合调一次 `flow_describe` 自己确认结构，让用户也能稍稍消化前面的操作
+
+## 流程运行后
+
+`flow_run` 在分析流程页面**原地触发**，不会跳到独立运行页。用户继续看到画布上节点状态变化（idle → running → completed / failed），跟手动点"运行"按钮一样的体验。
+
+跑挂时：
+1. `flow_run_status(run_id)` → 找到 status=failed 的节点
+2. `flow_node_output_preview(run_id, failed_node_id)` → 看具体错误
+3. 切回开发者工具修代码 → `dev_reload` → 回流程**直接 flow_run 重跑**（同一 graph_id 不需要重建流程，新代码已生效）
 
 ## 与 dev_* 协同
 

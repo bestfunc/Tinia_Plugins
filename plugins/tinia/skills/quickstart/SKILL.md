@@ -25,14 +25,16 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp_
 
 在写代码前要确认：
 - **项目名**：英文，不含空格 / 特殊字符，如 `acoustic-tools`
-- **模板**：这种场景用 `basic_node` 或 `analysis_node`（后者多一个自定义视图）。讲清差异让用户选
 - **节点 key**：英文小写+下划线，如 `level_meter`
 - **输入输出类型**：调 `nodes_list_types` 看可选值，别瞎编
 
 ### 3. 创建 & 生成骨架
 
-- `dev_create_project` 建项目
-- `dev_create_node` scaffold 骨架（生成 node.yaml + runtime/run.py + schemas/params.schema.json）
+- **`dev_create_project(template_type="empty")`** —— **默认用 empty**，AI 自己 scaffold 节点干净；
+  basic_node / analysis_node 模板会带 example 文件残留，做完用户需要手动删，体验差
+- `dev_create_node` 单独 scaffold 节点骨架（生成 node.yaml + runtime/run.py + schemas/params.schema.json）
+
+只有当用户**明确说要看 example / 不熟悉结构想从样例改**时，才用 basic_node / analysis_node。详见 「pick-template」skill。
 
 ### 4. 改 node.yaml（如果骨架字段不符）
 
