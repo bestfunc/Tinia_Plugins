@@ -123,15 +123,32 @@ const set = (k: string, v: any) => onChange({ ...params, [k]: v })
 
 永远整体替换（spread 保留其他字段），不要原地改 params 对象。
 
-### 可用依赖
+### 可用依赖（白名单）
 
-官方内置节点的 ParamsForm 里能用：
-- `react`（`useState` / `useEffect` 等）
-- `lucide-react`（图标）
-- `@/lib/utils` 里的 `cn`（Tailwind class 合并）
-- 任何 Tailwind class
+dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）：
 
-**不能**直接 import Tinia 主应用的 Button / Select 组件 —— 平台未开放复用。表单控件都用原生 `<select>` `<input>`，Tailwind 统一样式。
+| 依赖 | 用途 |
+|---|---|
+| `react` | `useState` / `useEffect` / `useMemo` / `useRef` 等 |
+| `react-dom` | 仅在需要 portal 时；ParamsForm 通常用不到 |
+| `lucide-react` | 全部图标，按需 named import |
+| `zustand` | 需要复杂状态管理（少见） |
+| `echarts` / `echarts/core` / `echarts/charts` / `echarts/components` / `echarts/renderers` / `echarts-gl` | 复杂图表（散点 / 折线 / 3D） |
+| `uplot` | 时序图（声学指标常用） |
+| `@/lib/utils` | `cn`（Tailwind class 合并） |
+| `@/api/client` | `api.get` / `api.post` 等调 Tinia 主 API |
+
+任何 Tailwind class 都可用（主应用已扫描所有 dev 项目的 ui/ 目录）。
+
+**项目内相对 import**：允许 `./` `../`，但解析后必须仍在当前 dev 项目目录内（不能 `../../别的项目`）。
+
+**不能 import**：
+- `axios` / `dayjs` / `lodash` 等任何主应用没打包的第三方包 → 用 `fetch` / 原生 Date / 自己写
+- `@/components/*`（主应用业务组件）→ 高耦合，主应用一改插件就崩，自己用原生 `<select>` `<input>` 配 Tailwind
+- `@/stores/*`（主应用全局状态）→ 容易污染，要拿数据用 `@/api/client`
+- 任何 node 模块（`fs` / `child_process` 等）→ 浏览器代码本来也用不到
+
+要扩白名单：联系平台维护者（编辑 `server/internal/dev/build_sandbox.go` + `client/src/lib/devComponentLoader.ts`，两处必须对称改）。
 
 ---
 
