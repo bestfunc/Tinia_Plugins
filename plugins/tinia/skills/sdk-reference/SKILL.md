@@ -89,6 +89,13 @@ rt.emit_output("result", handle)
 
 0.0 ~ 1.0 进度。节点卡片边框会按这个填充。
 
+**message 必须简短**（建议 ≤ 25 个字符）—— 它会显示在节点卡片底部一行，前端 max-width 260px。
+长字符串虽然会被 truncate，但完全不显示有用信息更糟。
+
+✅ 好：`"处理 4/9"` / `"FFT 计算中"` / `"训练 epoch 12/50"`
+❌ 差：`f"处理 {i}/{total}: {item['name']}"` —— item.name 是文件名，常常 80+ 字符
+       会变成 `"处理 4/9: HPFAN-0415-…"` 用户看不到关键的进度数字
+
 ### `rt.emit_output(port_key: str, handle: dict)`
 
 **必须对每个 output 端口调一次**。handle 来自 `rt.upload_blob`。缺一个端口下游会没法连。
