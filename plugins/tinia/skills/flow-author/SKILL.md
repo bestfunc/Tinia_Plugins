@@ -113,9 +113,22 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 `flow_run` 在分析流程页面**原地触发**，不会跳到独立运行页。用户继续看到画布上节点状态变化（idle → running → completed / failed），跟手动点"运行"按钮一样的体验。
 
 跑挂时：
-1. `flow_run_status(run_id)` → 找到 status=failed 的节点
-2. `flow_node_output_preview(run_id, failed_node_id)` → 看具体错误
+1. `flow_run_status(run_id)` → 找到 status=failed 的节点；返回里有每个节点的 `error / traceback / message`
+2. `flow_node_output_preview(run_id, failed_node_id)` → 拿完整的 `traceback`（Python 堆栈）+ `error` + `message` + 该节点已成功的输出 ports
 3. 切回开发者工具修代码 → `dev_reload` → 回流程**直接 flow_run 重跑**（同一 graph_id 不需要重建流程，新代码已生效）
+
+### 诊断查不到日志？
+
+**没有"节点 stdout 日志"接口**（`dev_tail_logs` 是 dev project 模板调试用，不是流程运行用）。流程节点的运行问题完全通过：
+- `flow_run_status` 看每个 NodeRun 的 status / error / traceback / message
+- `flow_node_output_preview` 看单节点完整诊断 + 已产生的 output
+
+如果节点跑成功但**输出为空 / 数据不对**：
+- `flow_node_output_preview` 返回 `outputs` 数组，每个 port 有 `preview`（小数据已解析的 JSON）/ `size_bytes` / `type`
+- 用 `preview` 直接看节点输出了什么；如果 `truncated=true` 说明数据大到摘要了
+- 想验证特定字段，让节点临时往 result 里塞 debug 字段（如 `_debug_n_indicators: len(...)`），重跑后从 preview 看
+
+**避免反复跑流程做 debug** —— 改一次 run.py，flow_run 一次，从 preview 拿数据，比反复 reload 高效得多。
 
 ## 与 dev_* 协同
 
