@@ -124,12 +124,22 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 - `flow_run_status` 看每个 NodeRun 的 status / error / traceback / message
 - `flow_node_output_preview` 看单节点完整诊断 + 已产生的 output
 
-如果节点跑成功但**输出为空 / 数据不对**：
-- `flow_node_output_preview` 返回 `outputs` 数组，每个 port 有 `preview`（小数据已解析的 JSON）/ `size_bytes` / `type`
-- 用 `preview` 直接看节点输出了什么；如果 `truncated=true` 说明数据大到摘要了
-- 想验证特定字段，让节点临时往 result 里塞 debug 字段（如 `_debug_n_indicators: len(...)`），重跑后从 preview 看
+#### `flow_node_output_preview` 两种模式（按需选）
 
-**避免反复跑流程做 debug** —— 改一次 run.py，flow_run 一次，从 preview 拿数据，比反复 reload 高效得多。
+| mode | 用途 | 返回 |
+|---|---|---|
+| `summary`（默认）| **看格式对不对** | 每个 port 抽结构摘要：`type / size_bytes / preview.summary / preview.items[前3条] / preview._fields` |
+| `full` | **看数据对不对** | 小数据完整 inline；blob 也实际拉内容（默认上限 32KB / port，超过截断 + truncated:true 同时给 summary 兜底） |
+
+**典型诊断节奏**：
+1. 先 `mode="summary"` 看输出**形状**是不是预期（有没有 indicators 字段、items 多少条、字段列表对不对）
+2. 形状对但**数据可疑**时 `mode="full" port_key="result"` 拉具体数据看 value
+3. 节点有多 port 时**强烈建议加 `port_key`**，只拉感兴趣的，节省 context
+
+#### 输出为空 / 数据不对
+
+- 让节点临时往 result 里塞 debug 字段（如 `_debug_n_indicators: len(...)` / `_debug_first_item: items[0]`），重跑后 `mode="summary"` 直接看
+- **避免反复跑流程做 debug** —— 改一次 run.py，flow_run 一次，从 summary 拿数据，比反复 reload 高效得多
 
 ## 与 dev_* 协同
 
