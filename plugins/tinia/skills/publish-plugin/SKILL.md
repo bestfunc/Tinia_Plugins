@@ -3,7 +3,7 @@ name: publish-plugin
 display_name: 发布插件到商店
 description: 帮用户把开发完的插件提交到组织商店或在线商店 —— AI 起草元数据 / 写 README / 据上版本 diff 写 changelog → 推到前端表单让用户 review → 提交审批
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_get_project,mcp__tinia__dev_read_file,mcp__tinia__dev_tree,mcp__tinia__plugin_publish_self_check,mcp__tinia__plugin_diff_last_published,mcp__tinia__plugin_publish_draft,mcp__tinia__plugin_publish_submit,mcp__tinia__plugin_my_submissions
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_get_project,mcp__tinia__dev_read_file,mcp__tinia__dev_tree,mcp__tinia__plugin_publish_self_check,mcp__tinia__plugin_diff_last_published,mcp__tinia__plugin_publish_draft,mcp__tinia__plugin_my_submissions
 ---
 
 # 发布插件到商店
@@ -13,6 +13,8 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_get_project,mcp__ti
 - 对比上一发布版本的 diff → 写 changelog
 - 字段不明确 → 反问用户
 - 推 draft 到前端 PublishDialog 让用户**看到 AI 填好的字段**，可调整后提交
+
+> ⛔ **铁律**：AI 没有"直接提交"工具。你能做的是把字段推到 PublishDialog（`plugin_publish_draft`），由用户在对话框点「提交审批」按钮。**任何时候不要尝试帮用户提交、不要询问"要不要直接帮你提交"** —— 提交是用户的动作，AI 只负责起草和填字段。
 
 > **本 skill 必读**：[../../../docs/plugin-design-spec.md](../../../docs/plugin-design-spec.md) — 插件设计规范 + README 风格章节
 
@@ -115,39 +117,32 @@ plugin_publish_draft(
 - 用户能 review 并改字段
 - 用户改完点"提交审批" → 走常规流程
 
-跟用户说："已把字段推到发布对话框，你 review 一下，改完点'提交审批'。或者觉得 OK 我可以直接帮你提交。"
+**这一步就是终点**。给用户的回答里要明确写：
 
-### 7. 用户确认后直接提交（可选）
+> "字段已填到发布对话框（Dev Studio 已自动打开它）。请检查后点对话框右下角的「提交审批」按钮 —— 我没有直接提交的入口，必须由你点提交才会进入审批队列。"
 
-如果用户说"OK 直接提交"，调：
+不要写"OK 我帮你提交"或"要不要我直接提交"之类的话 —— **AI 没有这个工具**，提交永远是用户动作。
 
-```
-plugin_publish_submit(
-    project_id=42,
-    target="org",
-    metadata={...}
-)
-```
+### 7. 跟踪状态
 
-⚠ submit 调用后**无回退** —— 提交到审批队列。如果走 target=store 还需要确保已绑定商店账号（self_check 的 store_account_bound）。
-
-### 8. 跟踪状态
+用户点「提交审批」后，调：
 
 ```
 plugin_my_submissions
 ```
 
-返回我的提交列表 + 状态（pending / approved / rejected）。告诉用户："已进审批队列。审批人通过后，订阅者就能用了。"
+返回我的提交列表 + 状态（pending / approved / rejected / withdrawn）。告诉用户："已进审批队列。审批人通过后，订阅者就能用了。"
 
 ---
 
 ## 关键原则
 
-1. **不替用户想 target** —— 组织内 vs 在线商店是不同审批人 + 不同可见范围，必须问用户。
-2. **不瞎写 readme** —— 一定要先读代码（run.py / node.yaml），不能瞎吹功能。
-3. **diff 大改要警告** —— 跨大版本（major bump）或 modified 文件超过 5 个，提醒用户"这是破坏性变更吗？要不要在 changelog 里说明？"
-4. **首次发布额外检查** —— `last_published_version` 为空时，问用户："这是 X 的首次发布，包名以后不能改，确认 'wavelet_analysis' 这个 slug？"
-5. **拒绝复发同版本** —— 如果当前 version 已发过且 status=pending/approved，先问用户要不要 dev_bump_version 升号。
+1. **不替用户提交** —— AI 没有 submit 工具。draft 推完就停下，等用户在对话框点提交。任何"我直接帮你提交"的话都是错的。
+2. **不替用户想 target** —— 组织内 vs 在线商店是不同审批人 + 不同可见范围，必须问用户。
+3. **不瞎写 readme** —— 一定要先读代码（run.py / node.yaml），不能瞎吹功能。
+4. **diff 大改要警告** —— 跨大版本（major bump）或 modified 文件超过 5 个，提醒用户"这是破坏性变更吗？要不要在 changelog 里说明？"
+5. **首次发布额外检查** —— `last_published_version` 为空时，问用户："这是 X 的首次发布，包名以后不能改，确认 'wavelet_analysis' 这个 slug？"
+6. **拒绝复发同版本** —— 如果当前 version 已发过且 status=pending/approved，先问用户要不要 dev_bump_version 升号。
 
 ---
 
