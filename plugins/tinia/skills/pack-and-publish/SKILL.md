@@ -1,24 +1,25 @@
 ---
 name: pack-and-publish
-display_name: 打包并安装插件
-description: 开发完成后打包发布 —— 版本 +0.1、导出 .tar.gz、引导用户在 Web UI 里安装
+display_name: 打包导出 .tar.gz（辅助路径）
+description: 把开发完的插件导出成 .tar.gz —— 用于离线传输 / 自托管代码仓库。**主流发布请用 /publish-plugin** 走商店审批。
 user-invocable: true
 allowed-tools: mcp__tinia__dev_get_project,mcp__tinia__dev_bump_version,mcp__tinia__dev_export
 ---
 
-# 打包并安装插件
+# 打包导出 .tar.gz（辅助路径）
 
-开发 → 测试满意 → 发布。
+> ⚠ 这是**老路径**。绝大多数情况下你应该用 [`publish-plugin`](../publish-plugin/SKILL.md) 把插件提交到组织商店或 Tinia 在线商店审批 —— 用户体验更好（不用手动下载/上传），还有审批留痕。
+
+只在以下情况用本 skill：
+- 用户**离线**（没法连商店），需要 .tar.gz 传 USB 走
+- 想把代码托管到自己的 Git 仓库（不走 Tinia 分发）
+- 想给特定客户私下发包（不上商店）
+
+---
 
 ## 流程
 
-### 1. 确认可以发布
-
-问用户：
-- 节点都在本地测过了吗（`dev_reload` 成功 + Web UI 流程里跑通）
-- 有没有未保存的改动
-
-### 2. 升版本
+### 1. 升版本（如需）
 
 ```
 dev_bump_version(project_id)
@@ -26,63 +27,43 @@ dev_bump_version(project_id)
 
 规则：
 - 从 1.0 起步
-- 每次 +0.1 小数位（1.0 → 1.1 → 1.2 ... → 1.9 → 2.0 进位）
-- 用户不能直接改版本号，只能通过这个 tool 递增
+- 每次 +0.1（1.0 → 1.1 → ... → 1.9 → 2.0）
+- 用户不能直接改 version
 
-告诉用户："新版本 vX.Y"，问他是否确认继续导出（已经递增就不可逆，不回滚，但可以再 bump）。
+升版本时**当前 workdir 会自动存档为可恢复的快照**（详见 v1.21+ 版本快照机制），日后切回安全。
 
-### 3. 导出
+### 2. 导出
 
 ```
 dev_export(project_id)
 ```
 
-返回：
-```json
-{
-  "filename": "my-plugin-v1.2.tar.gz",
-  "size_bytes": 12345,
-  "encoding": "base64",
-  "content": "H4sIAA..."
-}
-```
+返回 base64 编码的 tar.gz（小项目）；> 20 MB 会报错，让用户去 Web UI 点导出按钮下载。
 
-**如果超过 20 MB 会报错** —— 告诉用户"项目太大，请在 Tinia Web UI 的 Developer Studio 里点导出按钮下载（不受 MCP 限制）"。
+### 3. 让用户下载
 
-### 4. 把文件保存到本地
+用户在 Dev Studio 项目卡片菜单 → "导出 .tar.gz"，浏览器直接下载文件。
 
-你有文件系统工具的话，把 base64 解码后写到本地：
-```python
-import base64
-with open("my-plugin-v1.2.tar.gz", "wb") as f:
-    f.write(base64.b64decode(content))
-```
+### 4. 离线安装
 
-或者告诉用户具体的 base64 字符串，让用户自己下载（不推荐）。
+把 tar.gz 给目标 Tinia 实例的管理员，他们在「节点仓库」页面 → 离线安装。
 
-### 5. 指导用户安装
+---
 
-**方式 A — 自用/本地测试**：
-> 1. 打开 Tinia Web UI
-> 2. 进"节点仓库"页面
-> 3. 点"离线安装"，选择刚下载的 `my-plugin-v1.2.tar.gz`
-> 4. 安装时如果没声明 namespace，会被放到 bestfunc —— 可能和官方节点 key 冲突，**建议事先在 tinia-repo.yaml 里写 namespace: <你的组织>**
+## 跟商店发布的区别
 
-**方式 B — 发给团队**：
-> 1. 上传 tar.gz 到团队共享位置（如公司内网文件服务器 / Google Drive / 企业 OA）
-> 2. 团队里的组织管理员按方式 A 安装到公司的 Tinia
-> 3. 安装后所有组织成员都能在节点面板看到（按 namespace 可见性规则）
+| 维度 | 商店发布（推荐） | 离线 .tar.gz |
+|---|---|---|
+| 入口 | `/publish-plugin` skill | `/pack-and-publish` skill |
+| 流程 | dev publish → 审批 → 自动装载到订阅者 | 手动下 tar.gz → 手动 upload 安装 |
+| 审批 | 有（组织 / 商店运营） | 无 |
+| 跟踪状态 | 「商店 → 我的提交」可看 | 无 |
+| 跨实例同步 | 订阅者自动跟最新版本 | 每个实例手动 reinstall |
 
-**方式 C — 发布到线上商店**（如果有的话）：
-> Tinia 线上商店（Tinia_Store 仓库）支持插件上架，当前 v1.19 还需手动走审核。
-
-## 注意事项
-
-- 导出前最好 `dev_get_project` 确认当前 version / namespace 和预期一致
-- 导出包里**不包含** `.venv`、`__pycache__`、`node_modules` 等（自动过滤）
-- 测试节点时 `dev_reload` 注册的是用户个人命名空间，**和 tar.gz 里声明的 namespace 不同** —— 正式安装后节点会归入 tinia-repo.yaml 声明的命名空间
+---
 
 ## 相关 Skill
 
-- 命名空间讲解 → 见 `tinia-repo-yaml`
-- tinia-repo.yaml 的 namespace/table_prefix 字段 → `tinia-repo-yaml`
+- **主流路径** → `publish-plugin`
+- 命名空间 → `tinia-repo-yaml`
+- 审批人视角 → `review-plugin`
