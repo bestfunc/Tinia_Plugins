@@ -3,7 +3,7 @@ name: flow-author
 display_name: 搭建分析流程
 description: 在 Tinia 分析流程模块里搭建测试/分析流程：选数据源 → 加节点 → 连线 → 跑 → 看结果。配合开发者工具用于"开发完插件后立刻搭测试图验证"。
 user-invocable: true
-allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview
+allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs,mcp__tinia__flow_runs_list
 ---
 
 # flow-author —— 帮用户搭分析流程
@@ -23,18 +23,20 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 4. [必问]                     → 让用户选用哪个数据源（除非用户已明说）
 5. flow_create                → 建空流程
 6. flow_open                  → 让前端跳转过去（用户跟随模式自动看到）
-7. flow_add_node × N          → 加 source → 主节点 → viewer
-8. flow_connect × N           → 连起来（端口类型自动校验）
-9. flow_set_node_params × N   → 配参数（datasource_id 必填）
-10. **flow_auto_layout         → 必做**：节点和边都加完后调一次，按拓扑分层重排
-                                 否则节点容易堆在一行、连线交叉，用户得手动拖
-11. flow_run                  → 异步触发，返回 run_id
-12. flow_wait_run(run_id)     → **同步阻塞等结果**（默认 60s，最大 300s）
+7. **flow_batch_edit({ops})   → 一次提交所有 add_node + connect + set_params**
+                                节点用 alias 引用，连边用 alias 不用 node_id
+                                batch 末尾自动 auto_layout，无需单独再调
+8. flow_run                  → 异步触发，返回 run_id
+9. flow_wait_run(run_id)     → **同步阻塞等结果**（默认 60s，最大 300s）
                                 优于自己 ScheduleWakeup 轮询：不用猜延时、绝不漏结果
-13. 失败 →
-    flow_node_output_preview(出错节点) → 拿到 traceback / message / 已成功的输出
-    切回 dev_* 修代码 → dev_reload → 回到第 11 步
+10. 失败 →
+    flow_node_logs(run_id, node_id) → status / error / traceback / **stderr 全文**
+    flow_node_output_preview(出错节点) → 已成功输出 + 摘要
+    切回 dev_* 修代码 → dev_reload → 回到第 8 步
 ```
+
+> **不要分散调用 add_node × N + connect × N + set_params × N** —— 用 `flow_batch_edit` 一次提交。
+> 11 节点 + 10 边的流程从 22 次工具调用变 1 次，减少上下文切换 + 别名引用避免维护 n1/n2 编号。
 
 ## 节点发现：避免一次拉全量
 
@@ -74,21 +76,26 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 用户刚在开发者工具开发完 `level_meter`，想测一下：
 
-1. `nodes_describe(level_meter)` → 假设它要 `audio_in`（AudioData），输出 `level`（IndicatorData）
+1. `nodes_describe(level_meter, fields=["meta","ports","params"])`
 2. `datasource_list` → 选 demo
 3. `flow_create({name: "测试 level_meter"})`
 4. `flow_open`
-5. `flow_add_node({class_type: "bestfunc/dataset_node"})` → 拿到 n1
-6. `flow_set_node_params({node_id: "n1", params: {datasource_id: <选的 id>}})`
-7. `flow_add_node({class_type: "bestfunc/materialize_node"})` → n2
-8. `flow_connect(n1.out → n2.in)`
-9. `flow_add_node({class_type: "<user_ns>/level_meter"})` → n3
-10. `flow_connect(n2.out → n3.audio_in)`
-11. `flow_add_node({class_type: "bestfunc/indicator_viewer"})` → n4
-12. `flow_connect(n3.level → n4.indicator)`
-13. **`flow_auto_layout({flow_id})`** ← 必做，整理画布
-14. `flow_run`
-15. 轮询 `flow_run_status`，failed → `flow_node_output_preview(出错节点)`
+5. **一次** `flow_batch_edit`（自动 auto_layout）:
+   ```js
+   {flow_id, ops: [
+     {op: "add_node", class_type: "bestfunc/dataset_node",
+       alias: "src", params: {datasource_id: <id>}},
+     {op: "add_node", class_type: "bestfunc/materialize_node", alias: "mat"},
+     {op: "add_node", class_type: "<user_ns>/level_meter", alias: "ana"},
+     {op: "add_node", class_type: "bestfunc/indicator_viewer", alias: "viz"},
+     {op: "connect", src: "src", src_port: "out",     dst: "mat", dst_port: "in"},
+     {op: "connect", src: "mat", src_port: "out",     dst: "ana", dst_port: "audio_in"},
+     {op: "connect", src: "ana", src_port: "level",   dst: "viz", dst_port: "indicator"},
+   ]}
+   ```
+6. `flow_run` → `flow_wait_run`
+7. failed → `flow_node_logs(run_id, node_id)` 看 stderr / traceback
+   再 `flow_node_output_preview(run_id, node_id, port_key)` 看部分 outputs
 
 ## 关键约束（绝不违反）
 
