@@ -14,7 +14,7 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 ```
 nodes_list({namespace: "bestfunc"})              # 找一个跟你输出数据类型相同的官方节点
-nodes_describe(选中的 key)                       # 看 source_files 列表
+nodes_describe(选中的 key, fields=["meta","ui"])  # 仅 source_files 清单
 nodes_read_source(key, "ui/ViewerLoader.tsx")    # 看官方加载层（fetch / loading / 错误）
 nodes_read_source(key, "ui/Viewer.tsx")          # 看官方主视图（布局 / 控件 / 图表）
 ```

@@ -34,7 +34,7 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp_
 
 ```
 nodes_list({namespace: "bestfunc"})              # 找类型相似的官方节点
-nodes_describe(选中的 key)                       # 看 source_files
+nodes_describe(选中的 key, fields=["meta","ui"])  # 仅 source_files 清单
 nodes_read_source(key, "ui/ParamsForm.tsx")      # 抄风格
 nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx
 nodes_read_source(key, "node.yaml")              # 学官方 node.yaml 怎么组织

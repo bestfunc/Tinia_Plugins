@@ -18,7 +18,7 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 ```
 1. nodes_list                 → 看用户有哪些节点可用
-2. nodes_describe(目标节点)   → 看输入输出端口、参数 schema
+2. nodes_describe(目标节点, fields=["meta","ports","params"]) → 端口 + schema（不拉 readme/yaml）
 3. datasource_list            → 列候选数据源
 4. [必问]                     → 让用户选用哪个数据源（除非用户已明说）
 5. flow_create                → 建空流程
@@ -40,6 +40,7 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 - **不要一上来就 nodes_describe 所有节点** —— `nodes_list` 已经返回 inputs/outputs 简略，足够选型
 - 只对**确定要加进流程**的节点调 `nodes_describe`，看完整 params_schema
+- **`nodes_describe` 默认带 readme/node_yaml 体积大** —— 用 `fields=["meta","ports","params"]` 精简（看代码风格才需要 docs，且建议单独调）
 - 命名空间：`bestfunc/*` 是官方节点；用户自己开发的节点在 `<user_namespace>/*`
 
 ## 数据源 elicitation 措辞模板
