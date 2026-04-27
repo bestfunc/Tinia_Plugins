@@ -3,7 +3,7 @@ name: create-node
 display_name: 创建 Tinia 节点
 description: 在现有 Tinia 插件项目里添加一个 Python 节点，生成骨架并实现 run.py
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__nodes_read_source
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__nodes_read_source
 ---
 
 # 创建 Tinia 节点
@@ -24,6 +24,20 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tin
 > - "默认表单足够 → 不写 ParamsForm" ❌ 只要参数有枚举/布尔，**必写**
 > - "节点说明走 README → ParamsForm 不写帮助" ❌ 用户在画布编辑时看不到 README
 > - "ParamsForm 顶部直接堆说明文字" ❌ 走 HelpCircle 弹窗，详见 `params-form` skill
+
+## ⚠ 写文件工具选择
+
+| 场景 | 用什么 |
+|---|---|
+| 创建新文件 / 完全重写 | `dev_write_file` |
+| **改一两处文本 / 改一个函数 / 加一个 import** | **`dev_edit_file`** |
+
+`dev_edit_file(path, old_string, new_string, replace_all=false)` 借鉴 Claude Code Edit：
+- 找到 `old_string`（必须在文件里**唯一**出现，含空格/缩进/换行）→ 替换为 `new_string`
+- 多处出现要么加更多上下文使其唯一，要么 `replace_all=true`
+- 比 dev_write_file 整文件重传省 10~100 倍 token，且不会复制粘贴出错把别处改丢
+
+**默认局部修改一律用 dev_edit_file**。dev_write_file 只在新建文件 / 节点骨架修改后第一次写完整内容时用。
 
 ## 流程
 

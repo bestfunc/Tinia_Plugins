@@ -3,7 +3,7 @@ name: datasource-plugin
 display_name: 开发数据源插件
 description: 用 datasource_plugin 模板开发一个接入外部数据源的 Tinia 插件（凭证 + 数据源 + 迁移 + UI）
 user-invocable: true
-allowed-tools: mcp__tinia__dev_create_project,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_reload,mcp__tinia__dev_list_projects
+allowed-tools: mcp__tinia__dev_create_project,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__dev_list_projects
 ---
 
 # 开发数据源插件
