@@ -3,7 +3,7 @@ name: flow-author
 display_name: 搭建分析流程
 description: 在 Tinia 分析流程模块里搭建测试/分析流程：选数据源 → 加节点 → 连线 → 跑 → 看结果。配合开发者工具用于"开发完插件后立刻搭测试图验证"。
 user-invocable: true
-allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview
+allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview
 ---
 
 # flow-author —— 帮用户搭分析流程
@@ -26,12 +26,14 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 7. flow_add_node × N          → 加 source → 主节点 → viewer
 8. flow_connect × N           → 连起来（端口类型自动校验）
 9. flow_set_node_params × N   → 配参数（datasource_id 必填）
-10. flow_run                  → 异步触发，返回 run_id
-11. flow_wait_run(run_id)     → **同步阻塞等结果**（默认 60s，最大 300s）
+10. **flow_auto_layout         → 必做**：节点和边都加完后调一次，按拓扑分层重排
+                                 否则节点容易堆在一行、连线交叉，用户得手动拖
+11. flow_run                  → 异步触发，返回 run_id
+12. flow_wait_run(run_id)     → **同步阻塞等结果**（默认 60s，最大 300s）
                                 优于自己 ScheduleWakeup 轮询：不用猜延时、绝不漏结果
-12. 失败 →
+13. 失败 →
     flow_node_output_preview(出错节点) → 拿到 traceback / message / 已成功的输出
-    切回 dev_* 修代码 → dev_reload → 回到第 10 步
+    切回 dev_* 修代码 → dev_reload → 回到第 11 步
 ```
 
 ## 节点发现：避免一次拉全量
@@ -83,8 +85,9 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 10. `flow_connect(n2.out → n3.audio_in)`
 11. `flow_add_node({class_type: "bestfunc/indicator_viewer"})` → n4
 12. `flow_connect(n3.level → n4.indicator)`
-13. `flow_run`
-14. 轮询 `flow_run_status`，failed → `flow_node_output_preview(出错节点)`
+13. **`flow_auto_layout({flow_id})`** ← 必做，整理画布
+14. `flow_run`
+15. 轮询 `flow_run_status`，failed → `flow_node_output_preview(出错节点)`
 
 ## 关键约束（绝不违反）
 
@@ -92,6 +95,7 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 - **节点 class_type 必须用 full_key**（`bestfunc/level_meter` 不是 `level_meter`），用裸 key 后端会 fallback 到 bestfunc 但模糊，AI 应明确。
 - **flow_run 是异步，用 flow_wait_run 等结果**：`flow_run` 返回 run_id 后，立刻调 `flow_wait_run(run_id)` 阻塞等到终态。**不要**用 ScheduleWakeup 自己设延时 —— 流程跑得多快猜不准，要么醒早错过要么醒晚浪费上下文。仅当流程预计 > 5 分钟时才考虑 wakeup 模式。
 - **节点位置不要传 x/y**：后端会自动避让已有节点找空白格摆放。除非用户明确指定坐标，否则 `flow_add_node` 不要带 x / y。
+- **节点 + 边都加完后必须调一次 `flow_auto_layout`** —— `findFreeSpot` 只保证不重叠，**不保证整齐**。auto_layout 按拓扑分层（入度 0 在第 0 列，下游列 = max(上游列)+1）让画布看着整齐，连线少交叉。**漏调 = 用户看到节点堆成一团**。
 
 ## 操作节奏（用户视觉跟随）
 
