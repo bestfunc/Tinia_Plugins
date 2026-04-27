@@ -48,13 +48,23 @@ self_check 返回里关键字段：
 4. **每个 `nodes/*/runtime/run.py`** — 理解节点实际做什么（DSP 算法 / 调的库 / 输出格式）
 5. **`schemas/params.schema.json`**（如有） — 看用户能配什么参数
 
-### 3. 升版本场景 → 拉 diff
+### 3. 升版本场景 → 拉 diff（按需精简）
+
+**两步走，不要一次拉全文 diff（容易爆 token）：**
 
 ```
-plugin_diff_last_published(project_id)
+# 步骤 a) 看改动规模
+plugin_diff_last_published(project_id, fields=["summary","stats"])
+# → {added: [...], removed: [...], modified: [{path, from_bytes, to_bytes, from_lines, to_lines}]}
 ```
 
-返回：`{has_last_version, last_version, added: [], removed: [], modified: [{path, from_content, to_content}]}`
+看 modified 文件名清单 + 字节/行变化，决定关注哪几个：
+
+```
+# 步骤 b) 拉关注文件的完整 diff
+plugin_diff_last_published(project_id, fields=["full"], glob="*.py")  # 仅 Python
+plugin_diff_last_published(project_id, fields=["full"], path="nodes/level_meter/")  # 单节点
+```
 
 AI 据此为 changelog_md 总结：
 - modified 数量大 + 涉及 run.py → 算法升级，重点说

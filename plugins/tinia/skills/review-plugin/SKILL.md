@@ -3,7 +3,7 @@ name: review-plugin
 display_name: 审批组织内插件提交
 description: 帮组织管理员审批待批的插件提交 —— 读元数据 / 检查代码安全性 / 据 Tinia 设计规范给意见 → 反问用户通过/拒绝 → 自动写拒绝理由
 user-invocable: true
-allowed-tools: mcp__tinia__plugin_review_pending,mcp__tinia__plugin_review_detail,mcp__tinia__plugin_review_read_file,mcp__tinia__plugin_review_open,mcp__tinia__plugin_review_approve,mcp__tinia__plugin_review_reject
+allowed-tools: mcp__tinia__plugin_review_pending,mcp__tinia__plugin_review_detail,mcp__tinia__plugin_review_read_file,mcp__tinia__plugin_review_grep_files,mcp__tinia__plugin_review_open,mcp__tinia__plugin_review_approve,mcp__tinia__plugin_review_reject
 ---
 
 # 审批组织内插件提交
@@ -74,6 +74,35 @@ plugin_review_read_file(approval_id=N, path="nodes/wavelet_transform/node.yaml")
 plugin_review_read_file(approval_id=N, path="nodes/wavelet_transform/runtime/run.py")
 plugin_review_read_file(approval_id=N, path="nodes/wavelet_transform/runtime/requirements.txt")
 ```
+
+### 4.5 安全审查 SOP（用 plugin_review_grep_files 一次性扫描）
+
+**不要逐个 read 文件翻**。用 grep 一次性把整个包内危险模式找出来：
+
+```
+# 1. 危险调用（任一命中需重点 read 上下文）
+plugin_review_grep_files(approval_id=N,
+    pattern="os\\.system|subprocess\\.|eval\\(|exec\\(|pickle\\.loads|__import__",
+    glob="*.py",
+    output_mode="content", context=2)
+
+# 2. 硬编码 secret
+plugin_review_grep_files(approval_id=N,
+    pattern="(api[_-]?key|secret|password|token|bearer)\\s*[=:]",
+    case_insensitive=true)
+
+# 3. 网络访问（应限于 rt.fetch_*；找直接调 requests/urllib 的）
+plugin_review_grep_files(approval_id=N,
+    pattern="^(import requests|import urllib|from requests|from urllib)",
+    glob="*.py")
+
+# 4. 不当 SDK 用法
+plugin_review_grep_files(approval_id=N,
+    pattern="Runtime\\(\\)",  # 应该用 Runtime.from_stdin()
+    glob="*.py")
+```
+
+grep 命中后再用 plugin_review_read_file 看具体上下文。grep 比逐文件 read 快 5~20 倍。
 
 ### 5. 总结审批意见
 
