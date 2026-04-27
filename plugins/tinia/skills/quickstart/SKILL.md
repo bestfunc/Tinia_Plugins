@@ -55,14 +55,14 @@ nodes_read_source(key, "runtime/run.py")         # 学 SDK 调用习惯（不抄
 
 默认骨架是 `inputs.data: AudioData` / `outputs.result: IndicatorData`，对"声级计"场景是合适的，通常不用改。但你应该：
 - `dev_read_file` 读 `nodes/<key>/node.yaml`
-- 确认字段，必要时 `dev_write_file` 修改
+- 局部修改用 **`dev_edit_file(path, old_string, new_string)`** —— 改一两行别用 dev_write_file 全量重传
 
 参数 schema 在 `schemas/params.schema.json`，如果需要"加权类型"（A/C/Z）这种参数，加到这里。
 
 ### 5. 写 run.py 逻辑
 
 - `dev_read_file` 读 `nodes/<key>/runtime/run.py`
-- 骨架里有 TODO 注释，按用户需求改
+- 骨架里有 TODO 注释，按用户需求改（用 `dev_edit_file` 替换 TODO 段，不要全文重写）
 - 注意：节点运行时通过 stdin 接收 `{inputs, params}`，用 `rt.fetch_blob(handle)` 拿数据，用 `rt.emit_output("result", handle)` 发输出
 - 需要新依赖（如 `librosa / scipy`）要加到 `runtime/requirements.txt`
 - 详细 SDK 用法见 「sdk-reference」skill
