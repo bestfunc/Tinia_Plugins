@@ -3,7 +3,7 @@ name: debug-node
 display_name: 调试节点运行错误
 description: dev_reload 失败或节点测试出错时的排查流程
 user-invocable: true
-allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_build_status,mcp__tinia__dev_build_history,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
+allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_build_status,mcp__tinia__dev_build_history,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
 ---
 
 # 调试节点运行错误
@@ -22,6 +22,10 @@ allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_bu
 1. **dev_compile 不能替代 dev_reload**。如果你改了 Python 代码 / 节点 yaml / 依赖，只调 dev_compile 是不会让节点生效的 —— 用户测试时会发现节点行为没变化。
 2. **dev_reload 报错不要"绕开"**。yaml 解析失败、依赖错误、migration 失败 —— 这些是真正需要解决的问题。**先告诉用户报错内容**，让用户决定怎么办，而不是切换到 dev_compile 假装一切正常。
 3. **dev_reload 已经包含 dev_compile**。dev_reload 末尾会顺带编译 UI。所以你不需要在 reload 之后再调 compile —— 看 reload 返回体的 `build` 字段就有完整编译结果。
+
+### 改文件优先用 dev_edit_file
+
+调试时往往是改一行 / 加一个 except / 修一个 import —— **用 `dev_edit_file(path, old_string, new_string)`** 局部替换，不要 dev_write_file 整文件重传。Claude Code Edit 风格：old_string 必须文件里唯一出现，多处则要 replace_all=true。`dev_write_file` 仅适合"重写整个文件"或"创建新文件"。
 
 ### `dev_reload` "streaming HTTP 错误"的诊断
 

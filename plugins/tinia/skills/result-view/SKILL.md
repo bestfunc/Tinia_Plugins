@@ -3,7 +3,7 @@ name: result-view
 display_name: 节点结果视图（Viewer.tsx / ViewerLoader.tsx）
 description: 节点跑完后用户点"查看数据"看到的视图怎么写 —— 按数据类型给完整模板，强制要求先读官方源码学风格
 user-invocable: false
-allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_read_source,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file
+allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_read_source,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file
 ---
 
 # 节点结果视图：按数据类型选模板 + 强制看官方实现
