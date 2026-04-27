@@ -58,13 +58,46 @@ Runtime 由 Tinia 的 Python runner 注入 stdin（JSON 任务协议）+ 签发�
 
 从 handle 下载数据（自动走 Tinia 的 blob store，小文件内存、大文件流式）。返回 bytes。
 
+**handle 是 dict**（含 `uri` / `hash` / `size` / `mime`），**不是裸 string**。
+直接传 `rt.task["inputs"][port_key]` 给它就行。
+
 ```python
+# ✅ 正确
 raw = rt.fetch_blob(rt.task["inputs"]["data"])
-ds = json.loads(raw)  # 大多数 handle 存的是 JSON
-for item in ds["items"]:
-    # 处理单个 item
-    audio_bytes = rt.fetch_content_url(item["content_url"])  # 或 item.blob_uri
+ds = json.loads(raw)
+
+# ❌ 错误：传裸 uri 字符串
+raw = rt.fetch_blob(some_item["local_uri"])  # 报错 "handle 缺少 hash 字段"
 ```
+
+### 处理 MaterializedDataset 的 item（音频文件等）
+
+dataset/materialize 节点输出的 `items[]` 里每条字段是 **`local_uri`**（minio://），
+**不是** `content_url`。处理方法二选一：
+
+**首选**：用 `tinia_audio.load_audio(rt, item)` —— SDK 已封装，自动处理
+`local_uri` / `content_url` 兼容 + WAV 解码 + 单/多声道：
+
+```python
+from tinia_audio import load_audio
+
+raw = rt.fetch_blob(rt.task["inputs"]["data"])
+ds = json.loads(raw)
+for item in ds["items"]:
+    audio, sr = load_audio(rt, item)   # numpy float32, sample_rate
+    # ... 用 audio / sr 做你的分析
+```
+
+**手动**：item 里有 `local_uri` 字段时按 handle dict 拼好后传 fetch_blob：
+
+```python
+for item in ds["items"]:
+    handle = {"uri": item["local_uri"], "hash": item.get("hash", ""),
+              "size": item.get("size", 0), "mime": "audio/wav"}
+    audio_bytes = rt.fetch_blob(handle)
+```
+
+> 写音频处理类节点时 99% 用 `tinia_audio.load_audio` 就够了，别自己 fetch + scipy.io.wavfile 解码。
 
 ### `rt.upload_blob(data: bytes, mime: str = "application/octet-stream") -> dict`
 
@@ -79,7 +112,20 @@ rt.emit_output("result", handle)
 
 ### `rt.fetch_content_url(url: str) -> bytes`
 
-直接从 URL 下载（item.content_url 经常是 MinIO 预签名，直接 GET 就行）。不走 blob store 的 hash 校验。
+直接从 URL 下载（不走 blob store hash 校验）。**只有 item 里真有 `content_url` 字段时才用** ——
+当前 dataset/materialize 节点的 item 主要给 `local_uri` 字段，应优先用 `tinia_audio.load_audio` 或
+拼 handle 走 `fetch_blob`。`fetch_content_url` 主要给老插件 / 外部 URL 场景用。
+
+### `tinia_audio` helper（音频处理优先用）
+
+`from tinia_audio import load_audio, compute_stat, downsample_list`
+
+封装了：
+- `load_audio(rt, item) -> (numpy.ndarray, sample_rate)` — 自动处理 local_uri/content_url 兼容 + WAV 解码
+- `compute_stat(values, stat)` — rms / mean / std / peak / kurtosis / skewness 等单 channel 统计
+- `downsample_list(arr, max_len=2000)` — 给 viewer 展示用的均匀降采样
+
+依赖：声明 `numpy` 和 `scipy` 在 `runtime/requirements.txt`（tinia_audio 自身不算依赖，会随 sdk 走 PYTHONPATH）。
 
 ## 进度 & 输出事件
 
@@ -138,6 +184,8 @@ except Exception as e:
 
 1. **忘记 emit_done** → 节点永远 running
 2. **emit_output 的 port_key 和 node.yaml 不一致** → 下游连不到
-3. **handle 和 bytes 混用** → `fetch_blob(handle)` 要传 handle dict；不要传 bytes
-4. **stdin 不要乱 print** → 所有 stdout 输出必须是 runner 约定格式的 JSON 事件；调试信息用 `emit_log` 或 stderr
-5. **大数据别全塞 handle 的 JSON** → items 里引用 `blob_uri`，真实字节存 blob store
+3. **handle 和 bytes 混用** → `fetch_blob(handle)` 要传 **handle dict**（来自 `rt.task["inputs"][port]` 或 `rt.upload_blob` 返回值）；不要传 `item["local_uri"]` 这种裸 string
+4. **音频处理别自己解码** → 用 `tinia_audio.load_audio(rt, item)` 一行搞定 fetch+WAV 解码；自己写 fetch_blob + scipy.io.wavfile.read 容易踩 local_uri vs content_url 兼容性坑
+5. **改了 requirements.txt 别只 dev_reload 一次** → reload 会自动检测 mtime 重装；但首次跑节点才触发 Prepare，要么测试节点跑一次让它装完，要么观察 server log 出现 `[python-runner] pip install for ...` 才算装完
+6. **stdin 不要乱 print** → 所有 stdout 输出必须是 runner 约定格式的 JSON 事件；调试信息用 `emit_log` 或 stderr
+7. **大数据别全塞 handle 的 JSON** → items 里引用 `blob_uri` / `local_uri`，真实字节存 blob store
