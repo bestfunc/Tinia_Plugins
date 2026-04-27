@@ -42,7 +42,7 @@ nodes_list({namespace: "bestfunc"})              # 找类型相似的节点
   - viewer 类    → 读 indicator_viewer / spectrum_viewer
   - source 类    → 读 dataset_node / materialize_node
 
-nodes_describe(选中的 key)                       # 看 source_files 列表
+nodes_describe(选中的 key, fields=["meta","ui"])  # 仅取 source_files 清单（不拉 readme/yaml 省 token）
 nodes_read_source(key, "ui/ParamsForm.tsx")      # 抄风格、抄结构
 nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx
 nodes_read_source(key, "node.yaml")              # 顺带看官方 node.yaml 怎么组织
@@ -159,7 +159,7 @@ Tinia 平台对节点 UI 有**强烈的视觉风格约定**（圆角、配色、
    - 写 analyzer  → 找 level_meter / fft_spectrum / wavelet_transform
    - 写 transform → 找 filter_node / convergent_trim
    - 写 viewer    → 找 indicator_viewer / spectrum_viewer
-2. nodes_describe(key)                   → 看 source_files 列表（含 ui/*.tsx）
+2. nodes_describe(key, fields=["meta","ui"]) → 看 source_files 列表（含 ui/*.tsx），省 token
 3. nodes_read_source(key, "ui/ParamsForm.tsx")  → 看官方表单怎么布局
 4. nodes_read_source(key, "ui/Viewer.tsx") 或 ViewerLoader.tsx → 看官方视图怎么布局
 ```

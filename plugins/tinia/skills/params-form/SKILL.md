@@ -44,7 +44,7 @@ return (
 
 ```
 nodes_list({namespace: "bestfunc"})              # 找一个跟你节点类型相似的官方节点
-nodes_describe(key)                               # 看 source_files 列表
+nodes_describe(key, fields=["meta","ui"])         # 仅 source_files 清单
 nodes_read_source(key, "ui/ParamsForm.tsx")       # 抄风格、抄结构
 ```
 
