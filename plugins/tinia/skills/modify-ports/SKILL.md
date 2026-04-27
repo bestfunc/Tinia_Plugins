@@ -101,7 +101,7 @@ run.py 里也记得 emit_output 新端口（不 emit 会让下游"没东西能�
      "default": "A"
    }
    ```
-3. `dev_write_file` 写回
+3. `dev_edit_file` 局部添加（schema 里只多一段 properties，全量重写没必要）
 4. 改 run.py 读这个参数：`params.get("weighting", "A")`
 5. `dev_reload` 测试
 
