@@ -55,12 +55,121 @@ nodes_read_source(key, "ui/ParamsForm.tsx")       # 抄风格、抄结构
 
 **违反后果**（不是建议，是事实）：
 - ❌ 自创 `<Section>` `<Field>` `<Card>` 包装组件 → **用户必让重写**
-- ❌ 顶部写长篇节点说明 / 设计原理 → 节点说明走流程编辑器 ⓘ 帮助按钮，**不在表单里写文字** → **用户必让重写**
+- ❌ 顶部写长篇节点说明文字（一大段 `<p>` 堆在表单里）→ 走 HelpCircle 弹窗，**详见 §节点说明弹窗** → **用户必让重写**
+- ❌ 完全不写节点说明（既没 HelpCircle 也没 description）→ 用户在画布上看不懂参数干啥 → **用户必让重写**
 - ❌ 堆叠多层折叠面板（"基础参数 / 高级参数 / 输出指标" 这种）→ **用户必让重写**
 - ❌ 自定义彩色按钮组（彩色方块选项）→ 用主应用统一的 `<select>` / `<input type="checkbox">` → **用户必让重写**
 - ❌ 自定义 hex 颜色（`#3b82f6` 等）→ 主题切换不跟随 → **用户必让重写**
 
-**正确做法 = 抄官方扁平结构 + 改业务字段**。即使你的节点有 18 个参数，**也是扁平排列**，最多用 `<details>` 微折叠（参考下方"完整示例"段的 sample_node）。
+**正确做法 = 抄官方扁平结构 + 改业务字段 + 加节点说明弹窗**。即使你的节点有 18 个参数，**也是扁平排列**，最多用 `<details>` 微折叠（参考下方"完整示例"段的 sample_node）。
+
+---
+
+## 节点说明弹窗（必写）
+
+每个 ParamsForm **必须**在顶部放一个 HelpCircle 按钮，点击弹出节点说明。
+否则用户在画布上根本看不懂这个节点能干啥、各参数怎么填。
+
+> **不要**：节点说明走 README / 写在 node.yaml description / 写在表单顶部一大段 `<p>`
+> **要**：HelpCircle → Modal → 结构化说明（用途/输入/输出/参数说明/典型用法/限制）
+
+### 标准模板
+
+```tsx
+import { useState } from 'react'
+import { HelpCircle, X } from 'lucide-react'
+
+interface Props {
+  params: any
+  onChange: (next: any) => void
+}
+
+export default function MyNodeParams({ params, onChange }: Props) {
+  const [showHelp, setShowHelp] = useState(false)
+  const set = (k: string, v: any) => onChange({ ...params, [k]: v })
+  const inputCls = 'w-full h-8 bg-input border border-border rounded px-2 text-sm'
+
+  return (
+    <div className="space-y-3">
+      {/* 帮助入口（必有） */}
+      <button onClick={() => setShowHelp(true)}
+        className="flex items-center gap-1 text-[10px] text-primary hover:opacity-80">
+        <HelpCircle className="w-3.5 h-3.5" /> 节点说明
+      </button>
+
+      {/* === 这里平铺所有参数控件 === */}
+      <div>
+        <label className="block text-xs text-text-muted mb-1">参数名</label>
+        <input className={inputCls} value={params?.x ?? ''} onChange={(e) => set('x', e.target.value)} />
+        <div className="text-[10px] text-text-muted mt-1">该参数一句话说明（来自 schema description）</div>
+      </div>
+      {/* ... */}
+
+      {/* 帮助弹窗 */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
+             onClick={() => setShowHelp(false)}>
+          <div className="bg-card border border-border rounded-lg p-5 max-w-lg max-h-[80vh] overflow-auto"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-text-primary">小波变换分析</h3>
+              <button onClick={() => setShowHelp(false)} className="text-text-muted hover:text-text-primary">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="space-y-3 text-xs text-text-secondary leading-relaxed">
+              <Section title="用途">
+                对输入音频做离散小波变换（DWT），逐频带统计能量、占比、熵、RMS 等指标。
+              </Section>
+              <Section title="输入">
+                <code>data: AudioData</code> — 任意 AudioData 子类型（Dataset / MaterializedDataset 均可）
+              </Section>
+              <Section title="输出">
+                <code>result: IndicatorData</code> — 每条 indicator 含 item_id / band / level /
+                sample_rate / freq_low_hz / freq_high_hz / name / value / unit
+              </Section>
+              <Section title="核心参数">
+                <ul className="list-disc pl-4 space-y-1">
+                  <li><b>wavelet</b>：通用首选 db4；语音 sym4/sym8；最快 haar</li>
+                  <li><b>level</b>：0=自动；手动建议 4-8</li>
+                  <li><b>channel_mode</b>：mono_mix 默认；多通道独立用 per_channel</li>
+                  <li>...每个参数列一行</li>
+                </ul>
+              </Section>
+              <Section title="典型用法">
+                轴承故障特征提取 → wavelet=db4 + per_channel + use_db=true
+              </Section>
+              <Section title="已知限制">
+                信号短于 min_samples 会被跳过（默认 256）
+              </Section>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wider text-text-muted mb-1">{title}</div>
+      <div>{children}</div>
+    </div>
+  )
+}
+```
+
+### 弹窗内容必含的 6 个区块
+
+| 区块 | 内容 |
+|---|---|
+| 用途 | 一段话说清这个节点解决什么业务问题 |
+| 输入 | 每个端口：key / type / 含义 |
+| 输出 | 每个端口：key / type / 字段说明 |
+| 核心参数 | 列出**所有**关键参数，每条一行解释（不是只挑 1-2 个） |
+| 典型用法 | 1-2 个组合配置示例（"分析 X 场景时 wavelet=Y, level=Z"）|
+| 已知限制 | 哪些情况会失败 / 跳过 |
 
 ---
 

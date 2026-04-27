@@ -8,6 +8,23 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tin
 
 # 创建 Tinia 节点
 
+## ⛔ 完成定义（必读）
+
+一个"完成"的 Tinia 节点 = 下面 6 件事**全部**做完，少一件就是没完成：
+
+1. **参数齐全**：node.yaml + params.schema.json 列出**所有合理可调节项**，不要因为"用户没明说"就只写 1-2 个。业务类型常见参数下方有清单。
+2. **node.yaml 端口正确**：input/output type 是真实存在的 type kind，不是瞎填
+3. **run.py 实现完整**：handle 所有 emit_output + 进度上报
+4. **`ui/ParamsForm.tsx` 必写**（不是可选）：默认文本框渲染体验差，凡是有枚举/布尔/范围/条件字段的节点**全部要写**自定义表单
+5. **节点说明弹窗必写**：ParamsForm 顶部 HelpCircle 帮助按钮 → 弹窗里含：用途 / 输入输出 / 各参数详细说明 / 典型用法 / 已知限制
+6. **跑通 dev_reload 无错**
+
+> **常见反例（用户必让重写）**：
+> - "用户没要求那么多参数 → 我只开 2 个" ❌ 业务上能调的就要给用户调
+> - "默认表单足够 → 不写 ParamsForm" ❌ 只要参数有枚举/布尔，**必写**
+> - "节点说明走 README → ParamsForm 不写帮助" ❌ 用户在画布编辑时看不到 README
+> - "ParamsForm 顶部直接堆说明文字" ❌ 走 HelpCircle 弹窗，详见 `params-form` skill
+
 ## 流程
 
 ### 0. 【必做】先读官方相似节点的源码学风格
@@ -51,9 +68,44 @@ nodes_read_source(key, "node.yaml")              # 顺带看官方 node.yaml 怎
 - **输出端口**（端口 key / 类型）
   - 分析节点一般输出 `IndicatorData`
   - 转换节点输出 `ProcessedDataset`
-- **参数**（需要用户在前端填的配置），JSON Schema 格式，如
-  - `threshold: number, default=65`
-  - `weighting: enum ["A", "C", "Z"], default "A"`
+
+#### 参数 ⚠ 关键原则：宁多勿少
+
+不要"只暴露用户明说的几个参数"。业务上每个能调节的环节都要开放成参数让用户在前端配。
+**列完一遍**，每条带 default + range + description 写到 schema。
+
+按业务类型对照检查（不是穷举，是兜底）：
+
+| 节点类型 | 至少要开放的参数维度 |
+|---|---|
+| **声学/音频分析（FFT/小波/包络/频带能量/MFCC 等）** | 算法核心参数（如 wavelet / nperseg / window）+ 通道处理（mono_mix/per_channel/left/right）+ 重采样目标 + 时间窗裁剪（start/end）+ 预处理（去直流/预加重/高通/归一化）+ 输出格式（dB 转换/单位）+ 跳过空数据策略 |
+| **滤波/变换** | 滤波类型（低通/高通/带通/带阻）+ 截止频率 + 阶数 + 滤波模式（filtfilt/lfilter）+ 边界处理 |
+| **特征/统计** | 统计指标列表（mean/std/rms/peak/kurtosis/skewness/entropy/zcr 等）多选 + 时间窗大小 + 重叠率 + 归一化 |
+| **数据筛选/采样** | 抽样策略（random/first/top/stratified）+ 数量/比例 + 排序字段 + 随机种子 + 阈值字段 + 阈值方向（>=/<=）+ 是否保留原顺序 |
+| **机器学习/聚类** | 距离度量 + 聚类数 / eps / min_samples + 标准化方式 + 随机种子 + 迭代上限 |
+| **段落/事件检测** | 检测算法 + 阈值（绝对/相对）+ 滞回 + 最小段长 + 合并间距 + 输出方向（time/sample） |
+
+> 用户会感谢"参数多但默认合理"，烦"参数少必须改 run.py"。
+
+参数 schema 写法（每条都要写 description，让 ParamsForm/帮助弹窗能用）：
+
+```json
+{
+  "wavelet": {
+    "type": "string",
+    "enum": ["db4", "db8", "sym4", "sym8", "coif1", "coif3", "coif5", "bior2.2", "bior4.4", "haar"],
+    "default": "db4",
+    "description": "小波基。db/sym 通用、coif 平滑性好、bior 对称无相位失真、haar 速度最快"
+  },
+  "level": {
+    "type": "integer",
+    "minimum": 0,
+    "maximum": 12,
+    "default": 0,
+    "description": "0=由 pywt.dwt_max_level 自动决定；分解出 1 个 cA + N 个 cD 频带"
+  }
+}
+```
 
 ### 3. 生成骨架
 
@@ -240,7 +292,26 @@ librosa
 
 Tinia reload 时会自动 `pip install -r requirements.txt`。
 
-### 6. 测试
+### 6. 写 `ui/ParamsForm.tsx`（必做，不是可选）
+
+> 默认表单（`<input type="text">`）对枚举/布尔/范围/条件字段全部失效，体验差。
+> 凡是节点有任何枚举/布尔/范围/依赖字段（**几乎所有节点**）—— **必写**自定义表单。
+>
+> 详细的写法、Tailwind token、import 白名单、避坑清单见 `params-form` skill。
+
+最小检查表（不达标 = 没完成）：
+
+- [ ] 顶部一个 HelpCircle 帮助按钮 → 点击弹出"节点说明"弹窗
+- [ ] 弹窗内含：用途 / 输入 / 输出 / 各参数详细说明 / 典型用法 / 已知限制
+- [ ] schema 里的每个参数都有 UI 控件（不是只渲染了一两个）
+- [ ] 枚举用 `<select>`、布尔用 `<input type="checkbox">`、有范围的数字用 `<input type="number" min max>`
+- [ ] 字段间依赖用条件渲染（如选 X 才显示 Y）
+- [ ] 用主应用 Tailwind token（`bg-input` / `text-text-muted` / `border-border` 等），不写 hex 颜色
+- [ ] 不堆叠折叠面板，扁平排列即可
+
+写完用 `dev_write_file` 落到 `nodes/<key>/ui/ParamsForm.tsx`。
+
+### 7. 测试
 
 ```
 dev_reload(project_id)
