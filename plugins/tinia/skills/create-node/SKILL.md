@@ -3,7 +3,7 @@ name: create-node
 display_name: 创建 Tinia 节点
 description: 在现有 Tinia 插件项目里添加一个 Python 节点，生成骨架并实现 run.py
 user-invocable: true
-allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__nodes_read_source
+allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__dev_glob_files,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__nodes_read_source
 ---
 
 # 创建 Tinia 节点
@@ -38,6 +38,17 @@ allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_list_nodes,mcp__tin
 - 比 dev_write_file 整文件重传省 10~100 倍 token，且不会复制粘贴出错把别处改丢
 
 **默认局部修改一律用 dev_edit_file**。dev_write_file 只在新建文件 / 节点骨架修改后第一次写完整内容时用。
+
+**找代码 / 看大文件**（不要逐个 nodes_describe + nodes_read_source 翻官方节点）：
+
+| 场景 | 用什么 |
+|---|---|
+| 知道函数名找用法 | `dev_grep_files("rt\\.fetch_blob", scope="official", glob="*.py")` |
+| 找参考组件 | `dev_grep_files("HelpCircle", scope="official", glob="*.tsx")` |
+| 找文件名 | `dev_glob_files(pattern="ParamsForm.tsx", scope="official")` |
+| 看大文件局部 | `dev_read_file(path, offset=100, limit=50)` —— 1-indexed |
+
+scope 可选 `dev` (默认) / `official` / `all`，返回路径前缀 `dev:<path>` 或 `official:<fullKey>/<rel>` 让你知道源头。**找参考实现优先 grep，不要遍历 nodes_describe**。
 
 ## 流程
 

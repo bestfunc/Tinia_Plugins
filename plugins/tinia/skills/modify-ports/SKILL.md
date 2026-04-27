@@ -3,7 +3,7 @@ name: modify-ports
 display_name: 修改节点端口与参数
 description: 给现有节点增/改/删端口或参数时的兼容性注意事项
 user-invocable: true
-allowed-tools: mcp__tinia__dev_read_file,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__nodes_describe
+allowed-tools: mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__dev_glob_files,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__nodes_describe
 ---
 
 # 修改节点端口与参数
