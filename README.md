@@ -1,6 +1,18 @@
-# Tinia_Plugins（AI 开发助手插件集）
+# Tinia_Plugins
 
-> Claude Code Plugin Marketplace：让 AI（Claude Code / Codex / Qwen CLI）直接帮你开发 Tinia 声学分析平台的插件节点。
+Tinia 声学数据分析平台的 AI 开发助手 plugin 市场，支持 Claude Code / Qwen Code 等 CLI。
+
+一条命令接入 **16 个 AI skill + OAuth 自动授权的 MCP connector**，覆盖插件项目创建、节点脚手架生成、源码搜索、`run.py` 编写、分析流程搭建（事务批操作）、节点测试调试、版本管理、打包发布、审批等场景。MCP 认证走 OAuth，首次使用自动弹出 Tinia 浏览器授权页，无需手动配 token。
+
+**三个部署变体，按场景选一个**：
+
+| Plugin | 适用场景 | MCP 地址 |
+|---|---|---|
+| **`tinia`** | SaaS 版（公网账号） | `https://tinia.bestfunc.com/api/v1/mcp` |
+| **`tinia-onprem`** | 公司私有化部署 | `https://t.bestfunc.com/api/v1/mcp` |
+| **`tinia-local`** | 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp` |
+
+> 三个变体共享同一组 16 个 skill（git symlink 到 `_shared`），仅 MCP server 地址不同。
 
 ## 这是什么
 
@@ -11,7 +23,8 @@ Tinia 是基于节点图的声学分析平台（[主项目](https://github.com/b
 - **添加节点**：AI 帮你想清楚输入输出类型、生成骨架代码
 - **写逻辑**：AI 写 `run.py`，你审查
 - **测试**：一键注册到个人命名空间，进 Tinia Web UI 流程编辑器连线验证
-- **打包发布**：版本 +0.1，导出 `.tar.gz` 安装到组织节点仓库
+- **搭分析流程**：AI 自动建流程、连线、跑、看产物、回头修代码（开发-测试闭环）
+- **打包发布**：版本递进、商店提交审批 / 离线 `.tar.gz` 双路
 
 ## 目录结构
 
@@ -50,47 +63,81 @@ Tinia_Plugins/
 └── CHANGELOG.md
 ```
 
-## 安装
+## 快速开始
 
-### 1. 前置条件
+### 前置条件
 
 - 一个能访问的 Tinia 实例（公网 SaaS / 公司私有化 / 本地 dev 至少一种）
-- 你的账号所在用户组里，超管已经为你开启了 `mcp:dev` 和 `mcp:nodes` 模块（在「系统设置 → 用户组模版」里）
+- 你的账号所在用户组开启了 `mcp:dev` / `mcp:nodes` / `mcp:flow` / `mcp:plugins` 模块（系统设置 → 用户组管理，超管或组织管理员可改）
 
-### 2. 按部署场景选一个 plugin 装
+### Claude Code（原生支持）
 
-我们提供三个 plugin 变体，**只需选一个安装**，不需要改任何配置文件：
-
-| Plugin | 适用场景 | MCP 地址 |
-|---|---|---|
-| **`tinia`** | SaaS 版（公网账号） | `https://tinia.bestfunc.com/api/v1/mcp` |
-| **`tinia-onprem`** | 公司私有化部署 | `https://t.bestfunc.com/api/v1/mcp` |
-| **`tinia-local`** | 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp` |
-
-> 三个变体共享同一组 Skills（通过软链接），只是 MCP server 地址不同。
-
-### 3. Claude Code
-
-```
+```bash
+# 1. 添加 marketplace（在 Claude Code 会话里输入）
 /plugin marketplace add bestfunc/Tinia_Plugins
 
-# 三选一，按你的部署场景：
+# 2. 安装对应变体（三选一，按你的部署场景）
 /plugin install tinia@tinia-plugins         # SaaS
 /plugin install tinia-onprem@tinia-plugins  # 公司私有化
 /plugin install tinia-local@tinia-plugins   # 本地开发
+
+# 3. 查看 MCP 连接状态
+/mcp
+# 可以看到 tinia 条目首次显示需要认证
+
+# 4. 触发 OAuth 授权
+# 直接让 AI 调一个 MCP 工具会自动弹浏览器；
+# 也可以 /mcp authenticate tinia 主动触发
 ```
 
-首次使用时 Claude 会打开浏览器跳到对应 Tinia 实例的 `/oauth/authorize` 页面，用 Tinia 账号登录并点「允许」即可。
+> 同时装多个变体（如 `tinia` 主用 + `tinia-local` 开发）完全 OK，两个 connector 在 Claude Code 里各自有独立 OAuth token，互不干扰。
 
-> 如果你既要在 SaaS 上做主力，又要本地调试 Tinia 主仓库，可以同时装 `tinia` 和 `tinia-local`，两个 connector 在 Claude Code 里各自有独立的 OAuth token，互不干扰。
+### Qwen Code（自动转换格式）
 
-### 4. Codex / Qwen CLI（不通过 marketplace）
+```bash
+# 1. 安装扩展（marketplace-url:plugin-name 格式，三选一）
+qwen extensions install bestfunc/Tinia_Plugins:tinia
+qwen extensions install bestfunc/Tinia_Plugins:tinia-onprem
+qwen extensions install bestfunc/Tinia_Plugins:tinia-local
 
-把对应变体目录下的 `plugin.json` 里 `mcpServers.tinia` 条目复制到你的客户端配置文件（每个 CLI 位置略有不同，参考各自文档）。OAuth 流程是标准 MCP 规范，兼容所有支持 MCP 2024-11-05 协议的客户端。
+# 2. 重启 Qwen Code 让 MCP 配置生效
+qwen
+
+# 3. 查看 MCP 连接状态
+/mcp
+# tinia 条目首次会显示 ✗ 已断开 / Needs authentication
+
+# 4. 触发 OAuth 授权
+/mcp auth tinia
+# 或直接让 AI 调一个 MCP 工具；浏览器打开 Tinia 授权页，
+# 登录 + 同意后自动完成，回到 /mcp 即可看到 ✓ Connected
+```
+
+Qwen Code 会自动把 Claude plugin 格式转成 Qwen extensions 格式并写入 `~/.qwen/extensions/<name>/qwen-extension.json`。
+
+### 其他支持 MCP 的客户端（Cursor / Zed / Cline 等）
+
+本仓库 skill 是纯 Markdown，按客户端各自的规范复制到对应目录即可；MCP connector 单独按客户端 UI 手动配，URL 填对应变体的地址（见上面表格），留空 OAuth Client ID/Secret 走自动注册（OAuth 2.1 + PKCE + RFC 7591 DCR）。
+
+### OAuth 授权流程
+
+首次使用浏览器会跳转到对应 Tinia 实例的 `/oauth/authorize` 页面，登录 Tinia 账号并同意授权后，access_token 默认 30 天有效，到期会自动静默刷新。随时可以在 **Tinia「账号设置 → 已授权应用」** 里撤销。
+
+授权页会列出 AI 客户端申请的每个权限模块（dev / nodes / flow / plugins / data 等），同意前可以核对范围。
 
 ### Windows 用户注意
 
 三个 plugin 目录的 `skills` 是 git symlink。Windows 下需要 git 配置 `core.symlinks=true`（开发者模式或 admin shell 下 `git clone` 默认会启用），否则 clone 出来 symlink 会变成普通文本文件。Claude Code 客户端不受影响，只是源码仓库 clone 后看着不对。
+
+## 更新
+
+```bash
+# Claude Code
+/plugin marketplace update tinia-plugins
+
+# Qwen Code
+qwen extensions update tinia            # 或 tinia-onprem / tinia-local
+```
 
 ## Skills 概览
 
@@ -144,10 +191,15 @@ AI 会自动选择合适的工具，你一般不用关心。完整列表：
 
 ## 权限 & 审计
 
-- 你在 OAuth 授权页可以看到 AI 客户端申请的每一个权限模块（dev / nodes / ...）
-- 授权后，可以在 Tinia「账号设置 → 连接的应用」里随时撤销
+- 你在 OAuth 授权页可以看到 AI 客户端申请的每一个权限模块（dev / nodes / flow / plugins / ...）
+- 授权后，可以在 Tinia「账号设置 → 已授权应用」里随时撤销
 - 所有 MCP 调用都会审计记录，超管或组织管理员可在「系统设置 → MCP 审计」查看
 
-## 许可
+## 问题反馈
+
+- 问题提交：https://github.com/bestfunc/Tinia_Plugins/issues
+- 商务合作：Great@bestfunc.com
+
+## License
 
 Apache-2.0
