@@ -8,7 +8,7 @@ Tinia 声学数据分析平台的 AI 开发助手 plugin 市场，支持 Claude 
 
 | Plugin | 适用场景 | MCP 地址 |
 |---|---|---|
-| **`tinia`** | SaaS 版（公网账号） | `https://tinia.bestfunc.com/api/v1/mcp` |
+| **`tinia`** | SaaS 版（公网账号） | `https://tinia-saas.bestfunc.com/api/v1/mcp` |
 | **`tinia-onprem`** | 公司私有化部署 | `https://t.bestfunc.com/api/v1/mcp` |
 | **`tinia-local`** | 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp` |
 
@@ -50,7 +50,7 @@ Tinia_Plugins/
 │   │   ├── pack-and-publish/
 │   │   ├── datasource-plugin/
 │   │   └── pick-template/
-│   ├── tinia/                        ← SaaS 版（tinia.bestfunc.com）
+│   ├── tinia/                        ← SaaS 版（tinia-saas.bestfunc.com）
 │   │   ├── .claude-plugin/plugin.json
 │   │   └── skills → ../_shared/skills
 │   ├── tinia-onprem/                 ← 公司私有化版（t.bestfunc.com）

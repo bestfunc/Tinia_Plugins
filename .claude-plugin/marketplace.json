@@ -6,13 +6,13 @@
   },
   "metadata": {
     "description": "Tinia 声学数据分析平台的 Claude Code plugin 市场。提供 SaaS / 公司私有化 / 本地开发 三种部署的 plugin 变体，按你的实际场景安装对应那一个即可。",
-    "version": "1.2.2"
+    "version": "1.2.3"
   },
   "plugins": [
     {
       "name": "tinia",
       "source": "./plugins/tinia",
-      "description": "【SaaS 版】tinia.bestfunc.com — 用 Tinia 的公网账号开发插件。16 个 AI skill + OAuth 自动授权 MCP connector。"
+      "description": "【SaaS 版】tinia-saas.bestfunc.com — 用 Tinia 的公网账号开发插件。16 个 AI skill + OAuth 自动授权 MCP connector。"
     },
     {
       "name": "tinia-onprem",
