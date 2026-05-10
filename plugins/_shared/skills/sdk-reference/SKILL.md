@@ -75,8 +75,9 @@ raw = rt.fetch_blob(some_item["local_uri"])  # 报错 "handle 缺少 hash 字段
 dataset/materialize 节点输出的 `items[]` 里每条字段是 **`local_uri`**（minio://），
 **不是** `content_url`。处理方法二选一：
 
-**首选**：用 `tinia_audio.load_audio(rt, item)` —— SDK 已封装，自动处理
-`local_uri` / `content_url` 兼容 + WAV 解码 + 单/多声道：
+**多通道节点（推荐）**：用 `AudioInput.iter_channels(rt, item)` —— 自动按 manifest channels_mode 展开通道。详见下面的 `tinia_audio_input.AudioInput` 章节。
+
+**单声道老节点**：用 `tinia_audio.load_audio(rt, item)` —— 多通道自动 mean down，方便快速写：
 
 ```python
 from tinia_audio import load_audio
@@ -84,7 +85,7 @@ from tinia_audio import load_audio
 raw = rt.fetch_blob(rt.task["inputs"]["data"])
 ds = json.loads(raw)
 for item in ds["items"]:
-    audio, sr = load_audio(rt, item)   # numpy float32, sample_rate
+    audio, sr = load_audio(rt, item)   # numpy float32, sample_rate（多通道已 mix down）
     # ... 用 audio / sr 做你的分析
 ```
 
@@ -97,7 +98,7 @@ for item in ds["items"]:
     audio_bytes = rt.fetch_blob(handle)
 ```
 
-> 写音频处理类节点时 99% 用 `tinia_audio.load_audio` 就够了，别自己 fetch + scipy.io.wavfile 解码。
+> 写新音频分析节点时**优先 `AudioInput.iter_channels`**（多通道感知）；只关心混合信号或纯单声道场景才用 `load_audio`。两者都比手写 fetch + scipy.io.wavfile 解码安全。
 
 ### `rt.upload_blob(data: bytes, mime: str = "application/octet-stream") -> dict`
 
@@ -116,16 +117,51 @@ rt.emit_output("result", handle)
 当前 dataset/materialize 节点的 item 主要给 `local_uri` 字段，应优先用 `tinia_audio.load_audio` 或
 拼 handle 走 `fetch_blob`。`fetch_content_url` 主要给老插件 / 外部 URL 场景用。
 
-### `tinia_audio` helper（音频处理优先用）
+### `tinia_audio` helper（老 API — 单声道场景）
 
 `from tinia_audio import load_audio, compute_stat, downsample_list`
 
 封装了：
-- `load_audio(rt, item) -> (numpy.ndarray, sample_rate)` — 自动处理 local_uri/content_url 兼容 + WAV 解码
+- `load_audio(rt, item) -> (numpy.ndarray, sample_rate)` — 自动处理 local_uri/content_url 兼容 + WAV 解码 + **多通道自动 mean(axis=1)** 单声道
 - `compute_stat(values, stat)` — rms / mean / std / peak / kurtosis / skewness 等单 channel 统计
 - `downsample_list(arr, max_len=2000)` — 给 viewer 展示用的均匀降采样
 
-依赖：声明 `numpy` 和 `scipy` 在 `runtime/requirements.txt`（tinia_audio 自身不算依赖，会随 sdk 走 PYTHONPATH）。
+⚠️ **多通道注意**：`load_audio` 默认 mix-down 单声道。要按通道独立分析（NVH 双耳响度 / 多麦阵列等），用下面的 `AudioInput` 抽象。
+
+### `tinia_audio_input.AudioInput` —— 多通道感知输入（v1.11+，**新节点首选**）
+
+```python
+from tinia_audio_input import AudioInput
+
+for ch in AudioInput.iter_channels(rt, item):
+    # ch.samples 1D ndarray, ch.sr int
+    # ch.name / ch.unit / ch.calibration_db / ch.index / ch.total_channels
+    spectrum = compute_fft(ch.samples, ch.sr)
+    results.append({
+        "item_id": ch.label,            # 自动加通道后缀（如 _Mic_FL），单通道源不加
+        "name": ch.display_name,        # 给视图层（如 "rec_001 [Mic_FL]"）
+        "value": ...,
+        "_meta": ch.to_meta_dict(),     # 自动展开 channel_label/source_channel/source_n_ch/...
+    })
+```
+
+**展开行为由节点 yaml 的 `channels_mode` 决定**（详见 node-yaml skill）：
+- `per_channel`（默认）：N 通道 → N 次 iter，输出 N 个独立 item
+- `mix_down`：自动 mean，1 个 item
+- `first_only` / `requires_single` / `multichannel_aware`：见 node-yaml
+
+**关键收益**：
+1. **不用写 mean(axis=1) 样板** —— SDK 收口，节点只关心算法
+2. **ChannelMeta 自动穿透** —— 上游 channel_split / 数据源命名模板设的 calibration_db / unit 自动到 ChannelInput
+3. **下游 indicator_viewer 自动多曲线** —— 输出 N items 直接画 N 条带 legend
+
+**心理声学 / level_meter 类节点**用 ChannelMeta.calibration_db 优先于 params 的写法：
+
+```python
+effective_cal = ch.calibration_db if ch.calibration_db else params.get("calibration_db", 0)
+```
+
+依赖：声明 `numpy` 和 `scipy` 在 `runtime/requirements.txt`。tinia_audio / tinia_audio_input 走 PYTHONPATH 不用列。
 
 ## 进度 & 输出事件
 

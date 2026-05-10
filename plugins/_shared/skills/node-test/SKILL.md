@@ -170,33 +170,46 @@ indicator_math (原始 - 平滑) → 1k 处应有显著正峰，其他频段 ≈
 
 ### 模板 8：多通道节点（channel_split / channel_select）
 
-⚠️ **关键背景**：所有分析节点（fft_spectrum / level_meter / loudness 等）的 `load_audio` 默认对多通道做 `samples.mean(axis=1)` 平均成单声道。要按通道独立分析，必须先 split 或 select。
+✅ **v1.11+ 新行为**：所有分析节点 manifest 默认 `channels_mode: per_channel` —— 多通道源自动按通道展开成 N 个独立 item，**不需要先 split**。下游 indicator_viewer 自动多曲线 + 通道命名。
+
+老 `load_audio` 路径仍 mix down 单声道（向后兼容老节点；新节点用 SDK `AudioInput`）。详见 sdk-reference / node-yaml skill 的 `channels_mode`。
 
 ```
-# channel_split：sg(channels=2) → split → 2 个独立 item
+# 直接接：sg(channels=2) → fft → 2 条独立频谱
 signal_generator (sine 1k, channels=2)
-  → channel_split (naming=auto)
   → fft_spectrum
-  → indicator_viewer  ← 看 2 条独立频谱（recording_L, recording_R）
+  → indicator_viewer  ← 自动 2 条频谱（rec_001 [ch0], rec_001 [ch1]）
 ```
 
-判定：拆分后 item 数 = 通道数；每个 item 名称带通道标签；下游分析得到 N 个独立结果。
+判定：fft 输出 N items（item_id 加通道后缀，name 加 [ch0]）；每 item 的 _meta 含 `channel_label / source_channel / source_n_ch`。
 
 ```
-# channel_select：从立体声取右通道，避免 mean 污染
+# 心理声学也一样：sg(channels=2) → loudness → 2 个独立 sone
 signal_generator (sine 1k, channels=2)
-  → channel_select (channels=R)  ← 只保留右通道
-  → loudness  ← 算出的就是右通道的 sone（不是左右平均）
+  → loudness
+  ← 输出 2 个 item，每通道独立 sone 值
 ```
 
-判定：select(L) 和 select(R) 在两通道相同时结果一致；不同时结果应不同。
+#### channel_split / channel_select 何时仍有用
+
+虽然 per_channel 已经覆盖大部分场景，这两个节点在以下情况仍有用：
+
+```
+# channel_split：通道分到不同分支独立处理（不同 channel 走不同链路）
+sg (channels=2) → channel_split → ch0 → lowpass 1k → fft_spectrum
+                                → ch1 → highpass 1k → fft_spectrum
+                                → indicator_merge 左右对比
+```
+
+```
+# channel_select：取一个通道喂给 channels_mode=requires_single 的节点
+sg (channels=4) → channel_select (channels=R) → <严格单声道 only 的节点>
+```
 
 ```
 # regression：select 对单通道输入应保持原样
-signal_generator (sine 1k, channels=1)
-  → channel_select (channels=0)
-  → fft_spectrum
-preview hash 应跟 没经过 select 的等价流程 一致
+signal_generator (sine 1k, channels=1) → channel_select (channels=0) → fft_spectrum
+preview hash 应跟没经过 select 的等价流程一致
 ```
 
 ### 模板 9：阶跃响应（系统识别）
@@ -320,7 +333,7 @@ flow_id: `xxx`，可在 DevStudio 中复跑
 5. **节点 method 一致**？loudness zwst vs zwtv、sharpness din vs aures，差 10-30%
 6. **节点本身 emit_error**？`flow_node_logs` 看 stderr / traceback
 7. **输出全 NaN/Inf**？检查 stimulus 是否激发数值病态（chirp_end ≥ Nyquist 混叠、silence 喂 log）
-8. **多通道结果跟单通道一样**？分析节点的 load_audio 默认 `mean(axis=1)` 平均，要按通道分析必须先 `channel_split` / `channel_select`
+8. **多通道结果跟单通道一样**？检查节点 manifest `channels_mode` —— v1.11+ 默认 `per_channel` 应自动展开；如果仍是单 item，可能节点没改造（仍用老 `load_audio` 路径），或显式声明 `mix_down`。要按通道分析可以上游用 `channel_split` 兜底。
 9. **测阶跃响应没看到爬升**？step 默认 `step_at_s=0` 是全程 DC 不是真阶跃，必须设 `step_at_s > 0`
 
 ## 边界提醒（主动告诉用户）
