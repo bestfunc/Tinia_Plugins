@@ -14067,15 +14067,21 @@ function renderCallbackPage(o) {
       font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Segoe UI", system-ui, sans-serif;
       min-height: 100vh;
       display: flex; align-items: center; justify-content: center;
-      background: linear-gradient(135deg, #f0fdfa 0%, #ecfeff 100%);
+      /* Tinia \u4E3B\u8272 #1D9E75 \u6697\u8272\u57FA\u8C03 */
+      background:
+        radial-gradient(circle at 20% 30%, rgba(29, 158, 117, 0.10) 0%, transparent 50%),
+        radial-gradient(circle at 80% 70%, rgba(93, 202, 165, 0.06) 0%, transparent 50%),
+        #0c0e10;
       padding: 24px;
+      color: #e1f5ee;
     }
     .card {
-      background: white;
+      background: #14171a;
+      border: 1px solid #2a2f34;
       border-radius: 16px;
       padding: 48px 56px;
       max-width: 480px; width: 100%;
-      box-shadow: 0 8px 32px rgba(20, 184, 166, 0.08), 0 2px 8px rgba(0,0,0,0.04);
+      box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4), 0 0 60px rgba(29, 158, 117, 0.06);
       text-align: center;
     }
     .icon {
@@ -14086,13 +14092,17 @@ function renderCallbackPage(o) {
       display: flex; align-items: center; justify-content: center;
       font-size: 36px; font-weight: 700;
       margin: 0 auto 24px;
+      box-shadow: 0 4px 16px rgba(29, 158, 117, 0.25);
     }
     h1 { font-size: 22px; font-weight: 600; color: ${o.titleColor}; margin-bottom: 12px; }
-    p { color: #4b5563; font-size: 15px; line-height: 1.6; }
-    .hint { color: #9ca3af; font-size: 13px; margin-top: 28px; }
-    .brand { color: #6b7280; font-size: 12px; margin-top: 32px; letter-spacing: 0.5px; }
-    .brand a { color: #14b8a6; text-decoration: none; }
-    .brand a:hover { text-decoration: underline; }
+    p { color: #9fe1cb; font-size: 15px; line-height: 1.6; }
+    .hint { color: #6e9182; font-size: 13px; margin-top: 28px; }
+    .brand {
+      color: #6e9182; font-size: 12px; margin-top: 32px;
+      letter-spacing: 1px; font-weight: 500;
+    }
+    .brand a { color: #5dcaa5; text-decoration: none; }
+    .brand a:hover { color: #1d9e75; text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -14125,10 +14135,10 @@ async function waitForCallback(port, state) {
       if (error2) {
         res.writeHead(400, { "content-type": "text/html; charset=utf-8" }).end(renderCallbackPage({
           title: "\u6388\u6743\u5931\u8D25",
-          titleColor: "#dc2626",
+          titleColor: "#ef4444",
           icon: "\u2715",
-          iconBg: "#fee2e2",
-          iconColor: "#dc2626",
+          iconBg: "rgba(239, 68, 68, 0.15)",
+          iconColor: "#ef4444",
           message: String(error2)
         }));
         clearTimeout(timeout);
@@ -14142,10 +14152,10 @@ async function waitForCallback(port, state) {
       }
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(renderCallbackPage({
         title: "\u6388\u6743\u6210\u529F",
-        titleColor: "#0d9488",
+        titleColor: "#5dcaa5",
         icon: "\u2713",
-        iconBg: "linear-gradient(135deg, #14b8a6 0%, #06b6d4 100%)",
-        iconColor: "white",
+        iconBg: "linear-gradient(135deg, #1d9e75 0%, #5dcaa5 100%)",
+        iconColor: "#0c0e10",
         message: "Tinia File MCP \u5DF2\u8FDE\u63A5\uFF0C\u8BF7\u56DE\u5230 AI \u5BA2\u6237\u7AEF\u7EE7\u7EED\u64CD\u4F5C\u3002"
       }));
       clearTimeout(timeout);
