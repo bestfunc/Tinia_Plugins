@@ -21,7 +21,7 @@
       "command": "node",
       "args": ["${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js"],
       "env": {
-        "TINIA_ENDPOINT": "http://localhost:18721"
+        "TINIA_ENDPOINT": "http://localhost:18722"
       }
     }
   }
