@@ -14045,7 +14045,7 @@ async function registerClient(meta, redirectUri) {
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       // PKCE public client
-      scope: "mcp"
+      scope: "mcp:data"
     })
   });
   if (!res.ok) throw new Error(`DCR \u6CE8\u518C\u5931\u8D25: ${res.status} ${await res.text()}`);
@@ -14194,7 +14194,7 @@ async function ensureToken(cfg) {
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", challenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
-  authorizeUrl.searchParams.set("scope", "mcp");
+  authorizeUrl.searchParams.set("scope", "mcp:data");
   log(`\u6253\u5F00\u6D4F\u89C8\u5668\u6388\u6743: ${authorizeUrl.toString()}`);
   openBrowser(authorizeUrl.toString());
   const code = await waitForCallback(port, state);
