@@ -1,7 +1,7 @@
 ---
 name: node-test
 display_name: 测试节点正确性
-description: 用 signal_generator 合成已知特征的测试信号（chirp/impulse/sine/noise），自动搭测试图验证 DSP / 分析节点的频响、衰减、相位、输出值是否符合理论。开发新滤波器 / FFT / 分析节点时的标配验证流程
+description: 用 signal_generator 合成已知特征的信号（chirp/impulse/sine/noise），自动搭测试图验证 DSP / 分析节点（滤波器、FFT、心理声学、声级计、段落检测等）的输出是否符合行业标准（IEC 61672 / ISO 532 / DIN 45692 / ECMA-418）。开发新节点 / 改完代码立刻验证 / 写 regression test 都用这个。
 user-invocable: true
 allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs
 ---
@@ -10,58 +10,82 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 ## 何时用
 
-- 用户说 "测一下 X 节点 / 验证 X 节点 / 这个滤波器对不对 / 频响对不对"
-- 用户刚改完节点代码（在 dev studio）想立刻验证
-- 调用 dev_reload 装载新版本节点之后
-- 怀疑某个节点输出不对，想用对照信号定位问题
-- 需要 regression test（同输入永远同输出）
+- "测一下 X 节点 / 验证 X 节点对不对"
+- 用户刚改完节点代码（dev studio）想立刻验证
+- 调用 `dev_reload` 装载新版本节点之后
+- 怀疑某节点输出不对，想用对照信号定位
+- 写 regression test（同输入永远同输出）
 
-## 核心思路 — 行业 4 大测试法
+## 核心范式 —— AI 是"判断者"，节点只负责生成 + 计算
 
-DSP / 信号节点的"正确性"不是字符串相等，而是看**信号特征**。用合成信号（特征已知）→ 跑节点 → 对比理论值。比真实音频测试更精确、可重复、可断言。
+```
+signal_generator (已知特征) → <被测节点> → 查看器 (输出指标)
+                                               ↓
+                                            AI 读输出 → 查 references/ → 判 PASS/FAIL → 写报告
+```
 
-| 方法 | 输入 stimulus | 看什么 | 推荐场景 |
+**判断逻辑不进节点**。节点只生成数据 + 算指标，AI 在 skill + reference 文档的指引下做"期望值查表 → 容差对比 → 失败诊断"。
+- 优点：测试可解释（AI 能说"为什么 FAIL、怎么修"）；可演化（加新节点不需要写新断言节点）；零运行时成本（不污染生产流程）。
+
+## 参考资料（按需 Read）
+
+测某类节点前，先 Read 对应 reference 拿"期望值表 + 测试方案 + 容差"。
+
+| 节点类别 | reference 文件 |
+|---|---|
+| `weighting_filter` / `level_meter` / `octave_analysis (A/C)` / `fft_spectrum (dBA)` | `references/weighting-curves.md` |
+| `fft_spectrum` / `octave_analysis` / `spectrum_smooth` | `references/fft-spectrum-rules.md` |
+| `loudness` / `sharpness` / `roughness` / `tonality` / `tnr` | `references/psychoacoustic-standards.md` |
+| `iir_filter` / `fir_filter` | 见下面"模板：测滤波器频响"（不需读 reference）|
+| `active_segment` / `zscore_anomaly` | 见下面"段落 / 异常检测"|
+| `indicator_math` / `indicator_merge` / `baseline_stats` | 见下面"指标节点"|
+
+**Read 的时机**：用户说"测 loudness" → 先 Read psychoacoustic-standards.md → 再搭流程。  
+**别一次全 Read**：浪费 token。只读涉及的那一份。
+
+## 行业 4 大测试法（适用所有 DSP 节点）
+
+| 方法 | stimulus | 看什么 | 适用 |
 |---|---|---|---|
-| **冲激法** ⭐ | `impulse` (amp=1) | spectrum 直接 = 完整频响 | 任何 LTI 滤波器（最快） |
-| **扫频法** ⭐ | `chirp` 20–20kHz log | spectrum 看通带 / 阻带 / 过渡 | 频响曲线最直观 |
-| **点验法** | `sine` 单一频率 | level_meter 看衰减分贝 | 验证特定截止点 |
-| **噪声法** | `white_noise` (固定 seed) | PSD 比 = 频响 | 统计验证 / regression |
+| **冲激法** ⭐ | `impulse` (amp=1) | spectrum 直接 = 频响 H(f) | LTI 滤波器（最快）|
+| **扫频法** ⭐ | `chirp` 20-20k log | spectrum 通带/阻带/过渡 | 频响曲线（最直观）|
+| **点验法** | `sine` 单一频率 | level_meter / 数值峰值 | 验证特定频点 |
+| **噪声法** | `white_noise` (固定 seed) | PSD 比 = 频响 | regression / 统计验证 |
 
 ## 标准动作链
 
 ```
-1. nodes_describe <要测的节点>
-   ↑ 拿到节点的输入/输出类型 + 参数
-   ↑ 同时 nodes_describe signal_generator 看 stimulus 模式
+1. nodes_describe <要测的节点> + nodes_describe signal_generator
+   ↑ 拿到节点输入/输出类型 + 关键参数
 
-2. 跟用户确认要测什么：
-   - 节点类型？（滤波器 / FFT / level / loudness / 自定义）
-   - 期望特征？（如 lowpass 1kHz 4 阶 → 1k 处 -3dB，2k -24dB ...）
-   - 用哪种测试法？默认推荐：滤波器用扫频，分析节点用 sine
+2. 跟用户对齐：
+   - 节点类型？（滤波器 / FFT / 心理声学 / level / 段落 ...）
+   - 期望特征？（如 lowpass 1k 4 阶 → 1k 处 -3dB）
+   - 用哪种测试法？（默认推荐：滤波器→冲激/扫频；分析节点→单 sine）
 
-3. flow_batch_edit 一次性搭测试图
-   - signal_generator (合适 stimulus) → 被测节点 → 验证节点（fft_spectrum / level_meter / spectrum_viewer / indicator_viewer）
-   - 别忘 flow_auto_layout 自动布局
+3. 按节点类别 Read references/X.md（如需要）拿期望值表
 
-4. flow_run + flow_wait_run
+4. flow_batch_edit 一次性搭测试图（带 flow_auto_layout）
 
-5. flow_node_output_preview 各级看输出
-   - 重点看最末验证节点（spectrum / level）
-   - 拿数值跟理论对比
-   - 给用户 PASS / FAIL 结论 + 关键数字
+5. flow_run + flow_wait_run
 
-6. 失败时排查：
-   - flow_node_logs 看节点 stderr
-   - 上游各节点 preview 看是否中途坏了
-   - 检查 stimulus 参数是否合理（如 chirp_end ≥ Nyquist 会混叠）
+6. flow_node_output_preview 各级看输出
+   - 重点看末端查看器
+   - 跟 reference 表对照
+   - 给用户【AI 测试报告】(见下面"输出格式")
+
+7. 失败排查：
+   - flow_node_logs 看 stderr / traceback
+   - 上游各节点 preview 看是否中途坏
+   - 检查 stimulus 参数（如 chirp_end ≥ Nyquist 会混叠、calibration_db 没设）
 ```
 
-## 测试模板（按节点类型选）
+## 测试模板
 
-### 模板 1：测滤波器频响（IIR/FIR/计权）
+### 模板 1：滤波器频响（IIR / FIR）
 
 ```
-signal_generator (chirp, 20-20000Hz, log, 5s, sr=48k, amp=0.5)
+signal_generator (chirp, 20-20000 Hz, log, 5s, sr=48k, amp=0.5)
   ↓
 <被测滤波节点>
   ↓
@@ -70,7 +94,7 @@ fft_spectrum
 spectrum_viewer
 ```
 
-**预期看到**：通带平坦、阻带衰减、过渡带斜率符合阶数（每阶 6 dB/oct）。
+**判定**：通带平坦、阻带衰减、过渡带斜率符合阶数（每阶 6 dB/oct）。
 
 **或更快的冲激法**：
 
@@ -84,58 +108,66 @@ fft_spectrum
 spectrum_viewer
 ```
 
-冲激响应的 FFT **直接就是**滤波器频响 H(f)，最干净。
+冲激响应的 FFT **直接就是**频响 H(f)，最干净。
 
-### 模板 2：测衰减是否准确（点验）
+### 模板 2：滤波器衰减点验
 
 ```
 # 测 highpass 50Hz：5Hz sin 应被强衰减、1kHz sin 应几乎不变
-signal_generator (sine, freq=5, 2s, amp=1.0)    → <hp_filter> → level_meter   预期：< -40 dB
-signal_generator (sine, freq=1000, 2s, amp=1.0) → <hp_filter> → level_meter   预期：≈ 0 dB
+signal_generator (sine, 5 Hz)    → <hp_filter> → level_meter   预期：< -40 dB
+signal_generator (sine, 1000 Hz) → <hp_filter> → level_meter   预期：≈ 0 dB
 ```
 
-跑两次（或两份并行流），分别看 level_meter 输出。
+### 模板 3：计权节点
 
-### 模板 3：测 A 计权曲线
+→ Read `references/weighting-curves.md`，按那里的 chirp 法测试。
 
-```
-signal_generator (chirp 20-20000Hz log, 10s, sr=96000)
-  ↓
-weighting_filter (A)
-  ↓
-fft_spectrum
-  ↓
-spectrum_viewer
-```
+### 模板 4：FFT / 频谱节点
 
-**预期**：1 kHz 处 0 dB；100 Hz 处 ≈ -19 dB；20 Hz 处 ≈ -50 dB（IEC 61672 标准曲线）。
+→ Read `references/fft-spectrum-rules.md`，按那里的 6 个测试场景。
 
-### 模板 4：测分析节点（FFT / level / loudness）
+### 模板 5：心理声学节点
+
+→ Read `references/psychoacoustic-standards.md`。**关键**：必须先设 `calibration_db`（默认 0 时归一化信号会被算成 94 dB SPL 太大）。
+
+### 模板 6：段落 / 异常检测
 
 ```
-# 测 FFT 是否准确：1 kHz 单音应在 spectrum 1 kHz 处出现窄峰
-signal_generator (sine, 1000Hz, 1s, amp=0.5, sr=48000)
-  ↓
-fft_spectrum
-  ↓
-spectrum_viewer  ← 1 kHz 处 应有 ≈ -6 dB 峰（amp=0.5 → 20log(0.5) = -6dB）
+# active_segment：用 burst 信号验证检出
+signal_generator (silence, 1s) + signal_generator (sine 1k, 2s) + signal_generator (silence, 1s)
+  → indicator_math (add) 或 audio_segment_split 拼接
+  → level_meter   ← 输出 IndicatorData
+  → active_segment (threshold=适中)
+  → annotation 输出应有 1 段，时间戳 ≈ [1s, 3s]
 ```
 
 ```
-# 测 level_meter：白噪声 RMS 应等于 amp（标准差）
-signal_generator (white_noise, seed=42, amp=0.1, 5s)
-  ↓
-level_meter   ← RMS 应 ≈ 0.1（即 -20 dB FS）
+# zscore_anomaly：用基线 vs 异常输入验证
+signal_generator (white_noise, seed=42)  → 提取特征 → baseline_stats   (建立 OK 基线)
+signal_generator (sine, 5kHz amp=0.5)    → 提取特征 → zscore_anomaly + baseline   (sine 应被检出异常)
+```
+
+判定：silence 段不应被检出有效段；纯 sine 在 white noise 基线下 z-score 应远超阈值。
+
+### 模板 7：指标节点（indicator_math / merge / baseline_stats）
+
+```
+# indicator_math add：两个 sine 频谱相加
+signal_generator (sine 1k) → fft_spectrum → A
+signal_generator (sine 2k) → fft_spectrum → B
+indicator_math (A + B, mode=add) → 应该 1k 和 2k 都有峰
 ```
 
 ```
-# 测 loudness 节点：1 kHz @ 满量程应 = 标定的 phon 值
-signal_generator (sine, 1000Hz, 2s, amp=1.0)
-  ↓
-loudness   ← 应 ≈ 标定的"1 kHz 满幅 → ? phon"
+# indicator_math sub：原始 - 平滑 = 突出度（pyfar 风格 tone prominence）
+signal_generator (sine 1k + white noise) → fft_spectrum → 原始
+                                          → spectrum_smooth (1/3 oct) → 平滑
+indicator_math (原始 - 平滑) → 1k 处应有显著正峰，其他频段 ≈ 0
 ```
 
-### 模板 5：Regression 测试（固定 seed）
+判定：算术运算结果跟手算一致；item_id 匹配 + 频率轴插值正确。
+
+### 模板 8：Regression（固定 seed）
 
 ```
 signal_generator (white_noise, seed=42, amp=0.5, 10s)  ← seed > 0 永远同输出
@@ -145,76 +177,109 @@ signal_generator (white_noise, seed=42, amp=0.5, 10s)  ← seed > 0 永远同输
 flow_node_output_preview  ← 跟"上次已知好"的输出对比
 ```
 
-每次改完节点跑一遍，输出 hash 不变 = 没回归。
+每次改完节点跑一遍，输出数值不变 = 没回归。
 
-## 决策细则（AI 必看）
-
-### 选哪种 stimulus？
+## 选 stimulus 决策表
 
 ```
-用户要测什么 → 选什么 stimulus
+要测什么 → 选什么 stimulus
 
-频响 / 频率特性    → chirp（扫频，看完整频响）or impulse（最快，spectrum = h(f)）
-某频点的精确衰减   → sine（单一频率，level_meter 读 dB）
-谐波失真           → square / sawtooth（含丰富谐波，spectrum 看谐波是否被滤掉）
-统计 / regression  → white_noise / pink_noise（seed 固定）
-分析节点 PSD       → sine（已知频率峰）or pink_noise（已知 1/f 谱）
-心理声学 / loudness → sine 1kHz @ 已知 amp（对照标准 SPL）
-去 DC / 高通验证   → step（DC = 直流）or sine 5Hz（极低频）
-基线对照           → silence（确认下游对零信号不报错 / 不出虚假峰）
+频响 / 频率特性          → chirp（看完整曲线）or impulse（最快，spectrum = h(f)）
+某频点的精确衰减         → sine（单频，level_meter 读 dB）
+谐波失真                 → square / sawtooth（含丰富谐波）
+统计 / regression        → white_noise / pink_noise (seed > 0)
+分析节点 PSD             → sine（已知频率峰）or pink_noise（已知 1/f 谱）
+心理声学 / loudness      → sine 1kHz @ 已知 SPL（calibration_db 必设）
+心理声学 / sharpness     → 多个不同频率 sine 对照（频率高 → acum 高）
+心理声学 / tonality      → sine（→1）vs white_noise（→0）对照
+心理声学 / tnr           → sine + white_noise 加和（已知 SNR）
+去 DC / 高通验证         → step（DC 阶跃）or sine 5Hz（极低频）
+段落检测                 → silence + burst + silence 拼接
+基线对照                 → silence（确认下游对零信号不报错 / 不出虚假峰）
 ```
 
-### sample_rate 怎么定？
+## sample_rate 怎么定
 
 ```
-默认 48000（行业通用）。
-要测 16 kHz 以上响应（如 A 计权 16k 段精度）→ 用 96000 或 192000。
-要省时间 + 内容低频 → 用 22050 或 16000 也行。
-计权节点（weighting_filter）：sr ≥ 48k 是 IEC Class 1，96k 才严格 Class 0。
+默认 48000（行业通用）
+要测 16 kHz 以上响应（A 计权 16k 段精度）→ 用 96000 或 192000
+内容低频 + 想省时间                    → 22050 或 16000 也行
+计权节点                               → sr ≥ 48k 是 IEC Class 1，96k 才严格 Class 0
+心理声学                               → ≥ 44100（覆盖完整人耳带宽）
 ```
 
-### 用 fft_spectrum 还是 spectrum_viewer？
+## AI 测试报告输出格式（给用户）
 
-```
-fft_spectrum：算频谱（数值 IndicatorData），下游可被 level_meter 等再分析
-spectrum_viewer：可视化（纯展示，给人眼看的）
+测试跑完，**用以下格式给用户报告**（不要只说 "PASS" 或贴 JSON）：
 
-测试流程通常 signal_generator → 节点 → fft_spectrum → spectrum_viewer，
-让用户在 viewer 里直接看曲线对照。
+```markdown
+## 🧪 测试报告：<节点名> v<版本>
+
+### 测试方案
+- **方法**：<冲激/扫频/点验/噪声>
+- **stimulus**：signal_generator (mode=..., freq=..., amp=..., sr=..., calibration_db=...)
+- **流程**：sg → 节点 → fft → viewer
+- **参考标准**：<IEC 61672 / ISO 532-1 / 自定义...>
+
+### 结果对照
+| 测试点 | 期望 | 实测 | 偏差 | 判定 |
+|---|---:|---:|---:|:---:|
+| 1 kHz @ A 计权 | 0.0 dB | 0.02 dB | +0.02 | ✅ |
+| 8 kHz @ A 计权 | -1.1 dB | -1.3 dB | -0.2 | ✅ |
+| 16 kHz @ A 计权 | -6.6 dB | -8.1 dB | -1.5 | ⚠️ |
+
+### 总体结论
+- **整体 PASS**：12/13 测试点在容差内
+- **关注**：16 kHz 偏差 -1.5 dB，超出 IEC Class 1 容差。原因：sr=48k 双线性变换在 Nyquist 附近压缩（理论限制）。建议测计权 16 kHz 段时把 sr 提到 96k。
+
+### 流程链接
+flow_id: `xxx`，可在 DevStudio 中复跑
 ```
+
+3 个要点：
+1. **写人话** —— 不只是"PASS/FAIL"，给"为什么、怎么修"
+2. **数字带单位** —— dB / sone / acum / Hz，别只给浮点
+3. **解释偏差** —— 偏差 > 容差时给出"算法原因 vs 节点 bug"判断
 
 ## 常见用户需求 → 测试方案
 
-| 用户描述 | 测试方案 |
+| 用户描述 | 方案 |
 |---|---|
-| "我刚改了 iir_filter 你测一下" | 模板 1：chirp → iir_filter → fft → viewer |
-| "weighting_filter A 计权对不对" | 模板 3：chirp 96k → weighting_filter A → fft → viewer |
-| "高通去工频是否真的去掉 50Hz" | 模板 2：sine 50Hz vs sine 1kHz 各一份对照 |
-| "fft_spectrum 准不准" | 模板 4 FFT：sine 1kHz → fft → 看 1k 处峰位置和高度 |
-| "我这个节点输出有问题" | 默认 sine 1kHz → 节点 → preview 看输出形态 |
-| "做 regression test" | 模板 5：white_noise seed=42 + preview hash 对比 |
+| "测一下我刚改的 iir_filter" | 模板 1：chirp → iir → fft → viewer |
+| "weighting_filter A 计权对不对" | Read weighting-curves.md → chirp 96k → A → fft 对表 |
+| "高通是否真的去掉 50Hz" | 模板 2：sine 50Hz vs sine 1kHz 对照 |
+| "fft_spectrum 准不准" | Read fft-spectrum-rules.md → 6 个验证场景 |
+| "loudness 节点对不对" | Read psychoacoustic-standards.md → 1 kHz @ 40 dB SPL → 应 1 sone |
+| "sharpness 是不是高频更尖锐" | Read psychoacoustic-standards.md → 1k vs 4k vs 8k 对照 |
+| "tonality 区分纯音和噪声" | Read psychoacoustic-standards.md → sine vs white_noise 对照 |
+| "tnr 检出纯音" | Read psychoacoustic-standards.md → sine + noise 加和测 |
+| "active_segment 检测准不准" | 模板 6：silence + burst + silence 拼接 |
+| "做 regression test" | 模板 8：white_noise seed=42 → preview 对比 |
 
-## 失败时怎么排查
+## 失败时排查清单
 
-调 `flow_node_output_preview` 各级看：
+按顺序问 AI 自己：
 
-1. **signal_generator 输出**：是否真的是 sine / chirp 等期望波形？
-   - 看 metadata.synthetic = true 确认是合成
-   - 看 active_samples 前几个值（如 sine 0Hz 应该是 0、cos 应该是 amp）
-2. **被测节点输出**：跟上一级对比，看是否符合滤波/分析行为
-3. **如果节点 emit_error**：调 `flow_node_logs` 看 stderr / traceback
-4. **如果输出全是 NaN/Inf**：检查 stimulus 是否激发了数值病态（如 chirp 终点 ≥ Nyquist）
+1. **stimulus 对不对**？`flow_node_output_preview signal_generator` 看 metadata.synthetic、active_samples 前几个值
+2. **校准对不对**？心理声学 / level_meter 类节点必须设 `calibration_db`，默认 0 会让归一化信号被当 94 dB
+3. **sr 够不够**？测 8k 以上响应 sr 至少 48k，测 16k 至少 96k（双线性变换限制）
+4. **FFT 参数**？n_fft 太小 → 频率分辨率不够；窗函数不对 → 旁瓣干扰
+5. **节点 method 一致**？loudness zwst vs zwtv、sharpness din vs aures，差 10-30%
+6. **节点本身 emit_error**？`flow_node_logs` 看 stderr / traceback
+7. **输出全 NaN/Inf**？检查 stimulus 是否激发数值病态（chirp_end ≥ Nyquist 混叠、silence 喂 log）
 
 ## 边界提醒（主动告诉用户）
 
-- **chirp_end ≥ sr/2**：超 Nyquist 会混叠，自动 warning 但仍生成
-- **白/粉噪声 seed=0**：每次结果不同，做 regression 必须设 > 0
-- **多通道**（channels > 1）：当前所有通道相同信号；要不同信号需多个 generator + merge
-- **超长 / 超大文件**：duration × sr × channels × 4 = 字节数，1 GB 以上会很慢
-- **silence**：真零信号，下游 fft 可能出 -inf dB（log(0)），告诉用户预期
+- **chirp_end ≥ sr/2**：超 Nyquist 会混叠（自动 warning 但仍生成）
+- **white/pink noise seed=0**：每次结果不同，做 regression 必设 > 0
+- **多通道**：当前所有通道相同信号；要不同信号需多个 generator + merge
+- **超长文件**：duration × sr × channels × 4 = 字节数，1 GB 以上很慢
+- **silence**：真零信号，下游 fft 可能出 -inf dB（log 0），告诉用户预期
+- **心理声学短信号**：duration < 2s 时 response time 内值不稳定，建议 ≥ 3s
 
 ## 与其他 skill 的关系
 
-- **filter-design** 教用户怎么搭滤波链；**node-test** 教怎么验证滤波链对不对。常一起用
-- **flow-author** 是搭通用流程；**node-test** 专做"测试图"（stimulus + assert）
-- **debug-node** 是节点 reload 失败排查；**node-test** 是节点跑通了但输出不对的排查
+- **filter-design** 教搭滤波链；**node-test** 教验证滤波链对不对（搭配用）
+- **flow-author** 搭通用流程；**node-test** 专做"测试图"（stimulus + assert）
+- **debug-node** 节点 reload 失败排查；**node-test** 节点跑通了但输出不对的排查
+- **create-node** 写新节点；**node-test** 写完后立刻测（推荐工作流：写 → reload → test）
