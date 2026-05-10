@@ -1,7 +1,7 @@
 ---
 name: node-test
 display_name: 测试节点正确性
-description: 用 signal_generator 合成已知特征的信号（chirp/impulse/sine/noise），自动搭测试图验证 DSP / 分析节点（滤波器、FFT、心理声学、声级计、段落检测等）的输出是否符合行业标准（IEC 61672 / ISO 532 / DIN 45692 / ECMA-418）。开发新节点 / 改完代码立刻验证 / 写 regression test 都用这个。
+description: 用 signal_generator 合成已知特征的信号（chirp/impulse/sine/noise/真阶跃），自动搭测试图验证 DSP / 分析节点（滤波器、FFT、心理声学、声级计、段落检测、多通道分析等）的输出是否符合行业标准（IEC 61672 / ISO 532 / DIN 45692 / ECMA-418）。覆盖单通道精度、多通道独立分析、系统阶跃响应。开发新节点 / 改完代码立刻验证 / 写 regression test 都用这个。
 user-invocable: true
 allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs
 ---
@@ -39,6 +39,7 @@ signal_generator (已知特征) → <被测节点> → 查看器 (输出指标)
 | `iir_filter` / `fir_filter` | 见下面"模板：测滤波器频响"（不需读 reference）|
 | `active_segment` / `zscore_anomaly` | 见下面"段落 / 异常检测"|
 | `indicator_math` / `indicator_merge` / `baseline_stats` | 见下面"指标节点"|
+| `channel_split` / `channel_select`（多通道）| 见下面"模板 8：多通道节点"|
 
 **Read 的时机**：用户说"测 loudness" → 先 Read psychoacoustic-standards.md → 再搭流程。  
 **别一次全 Read**：浪费 token。只读涉及的那一份。
@@ -167,7 +168,54 @@ indicator_math (原始 - 平滑) → 1k 处应有显著正峰，其他频段 ≈
 
 判定：算术运算结果跟手算一致；item_id 匹配 + 频率轴插值正确。
 
-### 模板 8：Regression（固定 seed）
+### 模板 8：多通道节点（channel_split / channel_select）
+
+⚠️ **关键背景**：所有分析节点（fft_spectrum / level_meter / loudness 等）的 `load_audio` 默认对多通道做 `samples.mean(axis=1)` 平均成单声道。要按通道独立分析，必须先 split 或 select。
+
+```
+# channel_split：sg(channels=2) → split → 2 个独立 item
+signal_generator (sine 1k, channels=2)
+  → channel_split (naming=auto)
+  → fft_spectrum
+  → indicator_viewer  ← 看 2 条独立频谱（recording_L, recording_R）
+```
+
+判定：拆分后 item 数 = 通道数；每个 item 名称带通道标签；下游分析得到 N 个独立结果。
+
+```
+# channel_select：从立体声取右通道，避免 mean 污染
+signal_generator (sine 1k, channels=2)
+  → channel_select (channels=R)  ← 只保留右通道
+  → loudness  ← 算出的就是右通道的 sone（不是左右平均）
+```
+
+判定：select(L) 和 select(R) 在两通道相同时结果一致；不同时结果应不同。
+
+```
+# regression：select 对单通道输入应保持原样
+signal_generator (sine 1k, channels=1)
+  → channel_select (channels=0)
+  → fft_spectrum
+preview hash 应跟 没经过 select 的等价流程 一致
+```
+
+### 模板 9：阶跃响应（系统识别）
+
+要测被试系统的"阶跃响应"（看上升时间 / 过冲 / 振铃）必须用真 unit step，**不是** DC 全程恒值：
+
+```
+signal_generator (mode=step, step_at_s=0.5, duration=2s, sr=48000, amp=1.0)
+  ↓
+<被测系统>（如 lowpass 1kHz）
+  ↓
+preview 时域波形
+
+期望：t<0.5s 输出 0；t≥0.5s 输出爬升到 1，可能有过冲和振铃
+```
+
+⚠️ 旧用法 `step_at_s=0`（默认）= 全程 DC 恒值，**测不到阶跃响应**。要测响应必设 `step_at_s > 0`。
+
+### 模板 10：Regression（固定 seed）
 
 ```
 signal_generator (white_noise, seed=42, amp=0.5, 10s)  ← seed > 0 永远同输出
@@ -193,9 +241,12 @@ flow_node_output_preview  ← 跟"上次已知好"的输出对比
 心理声学 / sharpness     → 多个不同频率 sine 对照（频率高 → acum 高）
 心理声学 / tonality      → sine（→1）vs white_noise（→0）对照
 心理声学 / tnr           → sine + white_noise 加和（已知 SNR）
-去 DC / 高通验证         → step（DC 阶跃）or sine 5Hz（极低频）
+去 DC / 高通验证         → step (step_at_s=0)（DC 全程恒值）or sine 5Hz（极低频）
+系统阶跃响应             → step (step_at_s=0.5)（真 unit step，看上升时间/过冲/振铃）
 段落检测                 → silence + burst + silence 拼接
 基线对照                 → silence（确认下游对零信号不报错 / 不出虚假峰）
+多通道按通道独立分析     → channels=N + channel_split → N 路并行（必须 split，否则 mean down）
+取一个通道分析           → channel_select (channels=L 或 0)，输出仍 AudioData
 ```
 
 ## sample_rate 怎么定
@@ -254,7 +305,9 @@ flow_id: `xxx`，可在 DevStudio 中复跑
 | "tonality 区分纯音和噪声" | Read psychoacoustic-standards.md → sine vs white_noise 对照 |
 | "tnr 检出纯音" | Read psychoacoustic-standards.md → sine + noise 加和测 |
 | "active_segment 检测准不准" | 模板 6：silence + burst + silence 拼接 |
-| "做 regression test" | 模板 8：white_noise seed=42 → preview 对比 |
+| "测多通道分析" / "立体声 L/R 分别处理" | 模板 8：channel_split 或 channel_select |
+| "测系统阶跃响应" / "看过冲和振铃" | 模板 9：step + step_at_s > 0 |
+| "做 regression test" | 模板 10：white_noise seed=42 → preview 对比 |
 
 ## 失败时排查清单
 
@@ -267,6 +320,8 @@ flow_id: `xxx`，可在 DevStudio 中复跑
 5. **节点 method 一致**？loudness zwst vs zwtv、sharpness din vs aures，差 10-30%
 6. **节点本身 emit_error**？`flow_node_logs` 看 stderr / traceback
 7. **输出全 NaN/Inf**？检查 stimulus 是否激发数值病态（chirp_end ≥ Nyquist 混叠、silence 喂 log）
+8. **多通道结果跟单通道一样**？分析节点的 load_audio 默认 `mean(axis=1)` 平均，要按通道分析必须先 `channel_split` / `channel_select`
+9. **测阶跃响应没看到爬升**？step 默认 `step_at_s=0` 是全程 DC 不是真阶跃，必须设 `step_at_s > 0`
 
 ## 边界提醒（主动告诉用户）
 
