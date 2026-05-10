@@ -5,8 +5,17 @@
 
 ## 校准约定（critical）
 
-Tinia 信号默认归一化到 `[-1, +1]`。心理声学算法需要知道"满量程对应多少 dB SPL"。  
-节点参数 `calibration_db`（loudness/sharpness）或 `calibration_offset_db`（level_meter）就是干这个的。
+Tinia 信号默认归一化到 `[-1, +1]`。心理声学算法需要知道"满量程对应多少 dB SPL"。
+
+**v1.11+ 推荐方式（首选）**：在 `signal_generator` 上配 `channel_calibration_db`，校准跟着数据流走，所有下游分析节点（loudness / sharpness / level_meter / tonality）自动用这个值（**优先于节点自身的 calibration_db params**）：
+
+```
+signal_generator (sine 1k, amp=0.063, channel_calibration_db="94")
+  ↓
+loudness   ← ch.calibration_db=94 自动生效，loudness params 的 calibration_db 不用配
+```
+
+**老方式（仍可用）**：在每个分析节点的 params 单独配 `calibration_db`（loudness/sharpness）或 `calibration_offset_db`（level_meter）。当上游没传 ChannelMeta 时这个 fallback。
 
 **行业标准锚点**（基于麦克风校准器 Brüel & Kjær 4231 等）：
 
@@ -24,7 +33,7 @@ amp = 1.0 (满量程) + calibration_db = 94 dB SPL  ⇒  对应 1 Pa 声压
 | 0.01 | 94 | 54 dB SPL |
 | 0.001 | 94 | 34 dB SPL |
 
-**测试模式**：固定 `calibration_db=94`，调 `amp` 模拟不同 SPL。
+**测试模式**：固定 sg `channel_calibration_db="94"`，调 `amp` 模拟不同 SPL；分析节点的 calibration_db 留空。
 
 ## loudness（响度，ISO 532-1 Zwicker）
 
@@ -88,10 +97,15 @@ DIN 45692：**1 kHz narrowband noise（160 Hz 带宽）@ 60 dB SPL = 1 acum**。
 ### 测试方案
 
 ```
-# 测移频后尖锐度上升
-signal_generator (sine, 1000 Hz, amp=0.063, duration=3s)  → sharpness (calib=94, weighting=din)  ← ≈ 1.0
-signal_generator (sine, 4000 Hz, amp=0.063, duration=3s)  → sharpness (calib=94, weighting=din)  ← ≈ 2.5
-signal_generator (sine, 8000 Hz, amp=0.063, duration=3s)  → sharpness (calib=94, weighting=din)  ← ≈ 4.5
+# 测移频后尖锐度上升 — sg 配 channel_calibration_db="94"，sharpness 节点 calibration_db 留空
+signal_generator (sine, 1000 Hz, amp=0.063, duration=3s, channel_calibration_db="94")
+  → sharpness (weighting=din)  ← ≈ 1.0 acum
+
+signal_generator (sine, 4000 Hz, amp=0.063, duration=3s, channel_calibration_db="94")
+  → sharpness (weighting=din)  ← ≈ 2.5 acum
+
+signal_generator (sine, 8000 Hz, amp=0.063, duration=3s, channel_calibration_db="94")
+  → sharpness (weighting=din)  ← ≈ 4.5 acum
 ```
 
 如果"频率上升 → acum 不上升或下降" → 节点反了。

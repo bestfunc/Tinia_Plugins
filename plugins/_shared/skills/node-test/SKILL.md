@@ -129,7 +129,7 @@ signal_generator (sine, 1000 Hz) → <hp_filter> → level_meter   预期：≈ 
 
 ### 模板 5：心理声学节点
 
-→ Read `references/psychoacoustic-standards.md`。**关键**：必须先设 `calibration_db`（默认 0 时归一化信号会被算成 94 dB SPL 太大）。
+→ Read `references/psychoacoustic-standards.md`。**关键**：必须设校准 —— v1.11+ 推荐**直接在 sg 上配 `channel_calibration_db="94"`**（校准跟数据走，所有下游分析节点自动用），分析节点 calibration_db params 留空。老方法（节点 params 配 calibration_db）仍可用，但不如 sg 配方便。
 
 ### 模板 6：段落 / 异常检测
 
@@ -189,6 +189,32 @@ signal_generator (sine 1k, channels=2)
   → loudness
   ← 输出 2 个 item，每通道独立 sone 值
 ```
+
+#### v1.11+ ChannelMeta 穿透（推荐写测试用）
+
+sg 加了 `channel_names / channel_units / channel_calibration_db` 参数，让通道元信息从源头流到所有分析节点。下游的 _meta.channel_label 和 calibration_db 会用这些值，**不再是默认 ch0/0**。
+
+```
+# 双耳录音 + 校准穿透
+signal_generator (sine 1k, channels=2,
+  channel_names="Mic_L,Mic_R",
+  channel_units="Pa,Pa",
+  channel_calibration_db="94,94")
+  → loudness   # ch.calibration_db=94 自动生效，节点 params.calibration_db 留空
+  ← 输出 2 items：name=[Mic_L]/[Mic_R]，value 是真 sone（94 dB SPL 校准过）
+```
+
+```
+# 多麦阵列模拟
+signal_generator (sine 1k, channels=5,
+  channel_names="Mic_FL,Mic_FR,Accel_X,Accel_Y,Accel_Z",
+  channel_units="Pa,Pa,g,g,g",
+  channel_calibration_db="94,94,100,100,100")
+  → fft_spectrum
+  ← 5 items，name 用业务名，_meta 含完整 channel_label/unit/calibration_db
+```
+
+判定：下游 _meta.channel_label 应是 sg 配的业务名（"Mic_L" 而非 "ch0"）；calibration_db 字段应等于 sg 配的值。
 
 #### channel_split / channel_select 何时仍有用
 
@@ -250,7 +276,7 @@ flow_node_output_preview  ← 跟"上次已知好"的输出对比
 谐波失真                 → square / sawtooth（含丰富谐波）
 统计 / regression        → white_noise / pink_noise (seed > 0)
 分析节点 PSD             → sine（已知频率峰）or pink_noise（已知 1/f 谱）
-心理声学 / loudness      → sine 1kHz @ 已知 SPL（calibration_db 必设）
+心理声学 / loudness      → sine 1kHz @ 已知 SPL（在 sg 配 channel_calibration_db="94"）
 心理声学 / sharpness     → 多个不同频率 sine 对照（频率高 → acum 高）
 心理声学 / tonality      → sine（→1）vs white_noise（→0）对照
 心理声学 / tnr           → sine + white_noise 加和（已知 SNR）
@@ -327,7 +353,7 @@ flow_id: `xxx`，可在 DevStudio 中复跑
 按顺序问 AI 自己：
 
 1. **stimulus 对不对**？`flow_node_output_preview signal_generator` 看 metadata.synthetic、active_samples 前几个值
-2. **校准对不对**？心理声学 / level_meter 类节点必须设 `calibration_db`，默认 0 会让归一化信号被当 94 dB
+2. **校准对不对**？心理声学 / level_meter 类节点需要 calibration —— 优先在 sg 上配 `channel_calibration_db`（自动穿透到所有下游），或者 fallback 在节点 params 单独配 `calibration_db`。两个都没设时归一化信号会被当 94 dB SPL 太大
 3. **sr 够不够**？测 8k 以上响应 sr 至少 48k，测 16k 至少 96k（双线性变换限制）
 4. **FFT 参数**？n_fft 太小 → 频率分辨率不够；窗函数不对 → 旁瓣干扰
 5. **节点 method 一致**？loudness zwst vs zwtv、sharpness din vs aures，差 10-30%
