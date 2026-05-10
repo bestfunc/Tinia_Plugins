@@ -309,14 +309,72 @@ composite 的 source_ids 必须是 **`source_kind=upload` 的数据源**，不�
 
 如 `driving_2026_5ch_composite` / `stereo_LR_composite` —— 让用户在数据源列表里一眼看出是合成的。前端列表项也会自带 ▣ "合成" 徽章，但名字带后缀方便搜索。
 
+## composite vs signal_generator：什么时候用哪个
+
+两条路径都能产出"多通道音频"给下游分析节点，但适用场景完全不同：
+
+```
+用户的诉求？
+├─ 合并已有真实 mono 录音 → composite-datasource（本 skill）
+│  - 工业 NVH 阵列录音 / 多次采集对比
+│  - 数据本身是采集来的
+│
+└─ 需要可控的合成测试信号（已知频率/相位/相关性） → signal_generator 节点
+   - 测分析节点的多通道能力（fft / loudness / etc）
+   - 没有真实采集数据，要造测试用例
+   - 通道间相位差 / 频率扫描 / 噪声相关性等可控场景
+```
+
+### signal_generator 多通道用法（v1.23 Phase E1 加强）
+
+`signal_generator` 的多通道支持有两层：
+
+**默认模式**（所有通道相同信号）：
+```json
+{
+  "channels": 4,
+  "mode": "sine",
+  "frequency": 1000,
+  "channel_names": "Mic_FL,Mic_FR,Accel_X,Accel_Y",
+  "channel_units": "Pa,Pa,g,g",
+  "channel_calibration_db": "94,94,100,100"
+}
+```
+
+**逐通道独立配置**（v1.23+，相位差/混合源测试）：
+```json
+{
+  "channels": 4,
+  "per_channel_config": true,
+  "per_channel_specs": [
+    {"mode": "sine", "frequency": 1000, "amplitude": 0.5, "phase_deg": 0},
+    {"mode": "sine", "frequency": 1000, "amplitude": 0.5, "phase_deg": 90},
+    {"mode": "white_noise", "noise_seed": 42, "amplitude": 0.1},
+    {"mode": "silence"}
+  ],
+  "channel_names": "L,R,Noise,Silent"
+}
+```
+
+`per_channel_specs[i]` 的字段缺失会沿用顶层 spec 的对应值（如 `phase_deg` 不传 = 用顶层 phase_deg）。`silence` 模式可以单独让某通道全零，方便对照分析。
+
+典型用例：
+- **通道间相位差测试**：ch0 phase=0 / ch1 phase=90 → 验证 fft 输出的相位
+- **频率扫描阵列**：ch0..ch4 各设不同 freq → 验证 fft per_channel 不混淆
+- **信噪比测试**：ch0=信号 / ch1=白噪声 → 验证 SNR 类指标
+- **混合验证**：ch0=sine / ch1=chirp / ch2=silence → 一次跑覆盖多场景
+
+AI 调时用 flow_add_node + flow_batch_edit 设置 signal_generator 节点 params 即可，跟其他节点用法一致。
+
 ## 与其他 skill 的关系
 
 | skill | 关系 |
 |-------|------|
-| **composite-datasource**（本）| 实际工作 — 帮用户合成多通道数据源 |
+| **composite-datasource**（本）| 实际工作 — 帮用户合成多通道数据源（真实录音）|
 | **datasource-test** | 测试导向 — 验证 datasource + 通道模板 + ChannelMeta 全链路 |
 | **flow-author** | 用 composite 数据源搭分析流程（dataset_node 直接用 ds_id，跟普通 upload 一样）|
 | **datasource-plugin** | 不相关（那是开发"接入外部数据源"的插件，跟"合成"是两件事）|
+| **signal_generator 节点** | 合成测试信号的替代路径（无真实录音时用）—— 详见上面"composite vs signal_generator"|
 
 ## 端到端验证模板
 
