@@ -13998,9 +13998,13 @@ async function saveConfig(cfg) {
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
   await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 384 });
 }
-function tokenValid(cfg) {
+function tokenValid(cfg, requiredScopes = []) {
   if (!cfg.access_token || !cfg.expires_at) return false;
-  return cfg.expires_at > Date.now() + 6e4;
+  if (cfg.expires_at <= Date.now() + 6e4) return false;
+  for (const s of requiredScopes) {
+    if (!cfg.scopes?.includes(s)) return false;
+  }
+  return true;
 }
 
 // src/oauth.ts
@@ -14021,6 +14025,8 @@ ${err.stack ?? ""}` : String(err);
 }
 
 // src/oauth.ts
+var REQUIRED_SCOPES = ["mcp:data", "mcp:data_write"];
+var SCOPE_STRING = REQUIRED_SCOPES.join(" ");
 function base64UrlEncode(buf) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -14045,7 +14051,7 @@ async function registerClient(meta, redirectUri) {
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       // PKCE public client
-      scope: "mcp:data"
+      scope: SCOPE_STRING
     })
   });
   if (!res.ok) throw new Error(`DCR \u6CE8\u518C\u5931\u8D25: ${res.status} ${await res.text()}`);
@@ -14182,7 +14188,7 @@ async function exchangeCode(meta, clientId, code, redirectUri, verifier) {
   return await res.json();
 }
 async function ensureToken(cfg) {
-  if (tokenValid(cfg)) return cfg;
+  if (tokenValid(cfg, REQUIRED_SCOPES)) return cfg;
   log("\u9700\u8981\u8BA4\u8BC1\uFF0C\u542F\u52A8\u6D4F\u89C8\u5668 loopback \u6D41\u7A0B...");
   const meta = await fetchMetadata(cfg.endpoint);
   const tempServer = createServer();
@@ -14204,19 +14210,21 @@ async function ensureToken(cfg) {
   authorizeUrl.searchParams.set("state", state);
   authorizeUrl.searchParams.set("code_challenge", challenge);
   authorizeUrl.searchParams.set("code_challenge_method", "S256");
-  authorizeUrl.searchParams.set("scope", "mcp:data");
+  authorizeUrl.searchParams.set("scope", SCOPE_STRING);
   log(`\u6253\u5F00\u6D4F\u89C8\u5668\u6388\u6743: ${authorizeUrl.toString()}`);
   openBrowser(authorizeUrl.toString());
   const code = await waitForCallback(port, state);
   const token = await exchangeCode(meta, clientId, code, redirectUri, verifier);
+  const grantedScopes = token.scope ? token.scope.split(/\s+/).filter(Boolean) : [];
   const newCfg = {
     ...cfg,
     client_id: clientId,
     access_token: token.access_token,
-    expires_at: Date.now() + token.expires_in * 1e3
+    expires_at: Date.now() + token.expires_in * 1e3,
+    scopes: grantedScopes
   };
   await saveConfig(newCfg);
-  log("\u6388\u6743\u6210\u529F\uFF0Ctoken \u5DF2\u4FDD\u5B58");
+  log(`\u6388\u6743\u6210\u529F\uFF0Ctoken \u5DF2\u4FDD\u5B58\uFF08scopes: ${grantedScopes.join(", ")}\uFF09`);
   return newCfg;
 }
 
@@ -14233,7 +14241,7 @@ async function uploadFileToDatasource(cfg, datasourceId, localPath, filenameOpt)
   log(`upload ${localPath} (${fileStat.size} bytes) \u2192 datasource ${datasourceId}`);
   const form = new FormData();
   form.append("files", new Blob([buf]), filename);
-  const url = `${cfg.endpoint}/api/v1/datasources/${datasourceId}/uploads`;
+  const url = `${cfg.endpoint}/api/v1/mcp_data/datasources/${datasourceId}/uploads`;
   const res = await fetch(url, {
     method: "POST",
     headers: { Authorization: `Bearer ${cfg.access_token}` },
