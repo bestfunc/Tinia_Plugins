@@ -3,7 +3,7 @@ name: datasource-test
 display_name: 测试数据源 + 通道命名模板
 description: 端到端测试 Tinia 数据源功能 — 创建数据源、生成或上传多通道 wav、创建通道命名模板、应用模板、用流程节点验证 ChannelMeta 全链路传播。覆盖 Phase B 数据源页 UI + Phase C 通道命名模板系统。AI 用 Bash + Python 在本机生成 wav 写到 /tmp，再用 path 上传（无大小限制）；用户已有的本机 wav 也直接传 path 即可。
 user-invocable: true
-allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_upload_files,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash
+allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia-file__upload_file_to_datasource,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash
 ---
 
 # datasource-test —— 测试数据源 + 通道命名模板
@@ -15,11 +15,17 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
 - 端到端测试 ChannelMeta 全链路（datasource → 节点 → 分析输出 _meta.channel_label）
 - 写回归测试（CRUD + 模板应用 + 删除级联）
 
-## 部署模式约束
+## 上传走本地 MCP（任何部署都可用）
 
-`datasource_upload_files` **仅在非 SaaS 部署下可用**（开发模式 / 桌面模式 / 自建 server）。
-SaaS 部署（`TINIA_EDITION=saas`，server 在公网）下 server 看不到 AI 本机文件，
-请用前端 UI 拖拽上传或先 SSH 把文件拷到 server 机器上。
+文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（npm 包 `@bestfunc-com/tinia-file-mcp`，由 plugin 自动拉起）。原因：
+
+- 远程 MCP（连 Tinia Server）看不到 AI 本机文件 — 在 SaaS 部署直接没法上传
+- MCP 协议层 base64 内联占 AI context 太重 — 大 NVH 录音 OOM
+
+本地 MCP 在用户机器跑 Node 子进程，HTTP multipart 直传 server 现有的
+`/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**。
+
+工具名：`mcp__tinia-file__upload_file_to_datasource`
 
 ## 核心流程
 
@@ -29,7 +35,7 @@ SaaS 部署（`TINIA_EDITION=saas`，server 在公网）下 server 看不到 AI 
 2. AI 在 Bash 里用 Python 生成 wav 写到 /tmp/test.wav
    或：用户已经有 /Users/.../recording.wav，直接传 path
         ↓
-3. datasource_upload_files(files: [{path: "/tmp/test.wav"}])
+3. upload_file_to_datasource(datasource_id=ds_id, local_path="/tmp/test.wav")
         ↓
 4. channel_template_create({n_channels: N, channels: [...]})  ← 建模板
         ↓
@@ -67,28 +73,24 @@ print("OK /tmp/test_5ch.wav")
 EOF
 ```
 
-然后：
+然后用本地 MCP 工具上传：
 
 ```
-datasource_upload_files(
+upload_file_to_datasource(
   datasource_id=ds_id,
-  files=[{"path": "/tmp/test_5ch.wav"}]   # filename 自动用 basename
+  local_path="/tmp/test_5ch.wav"   # filename 缺省 = basename
 )
 ```
 
-**用户已有文件**：直接传 path 不需要预处理：
+**用户已有文件**：直接传 local_path 不需要预处理：
 
 ```
-datasource_upload_files(
-  datasource_id=ds_id,
-  files=[
-    {"path": "/Users/me/recordings/engine_idle.wav"},
-    {"path": "/Users/me/recordings/engine_full.wav"}
-  ]
-)
+upload_file_to_datasource(datasource_id=ds_id, local_path="/Users/me/recordings/engine_idle.wav")
+upload_file_to_datasource(datasource_id=ds_id, local_path="/Users/me/recordings/engine_full.wav")
 ```
 
-server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH 录音 OK）。
+每次调一个文件（工具签名是单文件，多文件多次调）。第一次调用会自动启动浏览器 OAuth 授权。
+HTTP multipart 直传，sha256 去重，无大小限制（GB 级 NVH 录音 OK）。
 
 ## 测试模板
 
@@ -98,7 +100,7 @@ server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH �
 1. ds_id = datasource_create("test_dual_ch")
 2. Bash 生成：python3 <<EOF ... wavfile.write("/tmp/stereo_test.wav", 48000, samples) EOF
    2 通道 sine 1k @ 60dB SPL：sr=48000, n_channels=2, freq=1000, amp=0.063
-3. datasource_upload_files(ds_id, [{path: "/tmp/stereo_test.wav"}])
+3. upload_file_to_datasource(ds_id, "/tmp/stereo_test.wav")
 4. tpl_id = channel_template_create({
      name: "test_dual_LR",
      n_channels: 2,
@@ -122,7 +124,7 @@ server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH �
    - ch0/1: sine 1kHz amp=0.063（模拟双麦）
    - ch2/3/4: white_noise amp=0.01（模拟三轴加速度）
    - sr=48000, duration=3s
-3. datasource_upload_files(ds_id, [{path: "/tmp/driving_5ch.wav"}])
+3. upload_file_to_datasource(ds_id, "/tmp/driving_5ch.wav")
 4. tpl_id = channel_template_create({
      name: "驾驶舱 5 通道",
      n_channels: 5,
@@ -177,8 +179,9 @@ server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH �
 
 | 现象 | 可能原因 |
 |------|---------|
-| `datasource_upload_files` 返回 skipped > 0 | 看返回的 skip_reasons 数组，常见：path 不是绝对路径 / 文件不存在 / 权限不够 |
-| SaaS 部署调 datasource_upload_files 返回错误 | "SaaS 部署不可用" — 是预期行为，请用前端 UI 拖拽上传 |
+| 第一次调 upload_file_to_datasource 卡住 | OAuth 浏览器授权流程；检查浏览器是否弹出，授权后回到 AI 客户端继续 |
+| upload_file_to_datasource 报"打开 path 失败" | local_path 不是绝对路径 / 文件不存在 / 权限不够 |
+| 上传成功但没看到工具响应 | server 端走 multipart handler，体积大时多等几秒 |
 | 文件大小 = 30 字节但是合法 wav | 可能 numpy stack 维度搞反，应该 (n_samples, n_ch) 不是 (n_ch, n_samples) |
 | `channel_template_create` 报 "channels 长度必须等于 n_channels" | 数组长度跟 n_channels 不一致，检查 |
 | `datasource_describe` 没看到 channel_template_id | 当前 describe 只在 v1.23+ 后端返回这个字段，旧版可能没 |
@@ -188,13 +191,13 @@ server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH �
 
 ### 文件大小
 
-`datasource_upload_files` 用 path 模式，server 直接读本地文件，**无大小限制**。
-GB 级 NVH 录音也能上传 — 只要 server 跟 AI 同机（非 SaaS 部署）。
-SaaS 部署下用前端 UI 拖拽。
+`upload_file_to_datasource` 走本地 MCP HTTP multipart 直传，**无大小限制**。
+GB 级 NVH 录音可上传，AI context 不受影响（流量从用户机器经 HTTP 直接到 Tinia
+Server，不过 MCP 协议层）。任何部署模式都通用（SaaS / OnPrem / 本地 dev）。
 
 ### 上传后是否要等？
 
-`datasource_upload_files` 是同步的，返回时已写入 blob + DB。立即可用。
+`upload_file_to_datasource` 是同步的（multipart 上传完成后才返回），返回时已写入 blob + DB。立即可用。
 
 ### channel_template_create 的 is_org_default
 
