@@ -1,7 +1,7 @@
 {
   "name": "tinia-local",
   "description": "Tinia 本地开发版（localhost:18722，对应 ./start-dev.sh 启动的 Vite dev 端口）的 AI 开发助手：16 个 skill + OAuth 自动授权的 MCP connector。让 Claude / Codex / Qwen CLI 帮你完成 Tinia 插件项目的创建、节点脚手架、编写 run.py、搭建测试流程、调试、打包发布全流程。",
-  "version": "1.2.6",
+  "version": "1.2.7",
   "author": {
     "name": "Bestfunc Technology",
     "email": "Great@bestfunc.com"

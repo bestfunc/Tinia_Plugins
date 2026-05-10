@@ -261,6 +261,17 @@ outputs:
 
 **改分类**：顶部 `category: analyzer`
 
+**音频分析节点加 `channels_mode`**（重要）：
+
+```yaml
+channels_mode: per_channel    # 默认行为，多通道源自动按通道展开成 N items
+```
+
+可选值：
+- `per_channel`（默认推荐）：N 通道 → N 个独立 item
+- `mix_down`：自动 mean 单通道
+- `first_only` / `requires_single` / `multichannel_aware`：详见 `node-yaml` skill
+
 **改参数 schema**：
 - 骨架的 `schemas/params.schema.json` 默认只有一个 threshold
 - 按需扩充（每个参数一个 properties 条目）

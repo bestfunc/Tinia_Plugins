@@ -148,6 +148,24 @@ runtime:
   python: "3.10"          # 可选，指定解释器版本
 ```
 
+### `channels_mode`（string，可选；音频分析节点用）
+
+声明节点对**多通道音频输入**的展开策略。SDK `AudioInput.iter_channels()` 据此分发，节点开发者不写多通道路由代码。
+
+```yaml
+channels_mode: per_channel   # 默认（行业共识，推荐）
+```
+
+| 值 | 行为 | 适用 |
+|----|------|------|
+| `per_channel` | N 通道 → N 次 iter，输出 N 个 item | **大多数分析节点**（fft / loudness / level_meter ...）|
+| `mix_down` | 多通道 mean → 单通道，1 个 item | 显式只关心混合信号 |
+| `first_only` | 只取 ch0，1 个 item | 单通道 only 节点 |
+| `requires_single` | 多通道直接报错 | 严格接口（要求上游先 split/select）|
+| `multichannel_aware` | 节点自己处理 (n_ch, n_samples) | channel_split / channel_select 这种通道操作节点 |
+
+不设 = 平台 fallback `per_channel`（向后兼容老节点）。详见 `sdk-reference` 的 AudioInput 章节。
+
 ### `ui`（object，可选）
 
 ```yaml
