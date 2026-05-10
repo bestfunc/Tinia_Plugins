@@ -1,7 +1,7 @@
 {
   "name": "tinia-onprem",
   "description": "Tinia 公司私有化部署版（t.bestfunc.com）的 AI 开发助手：16 个 skill + OAuth 自动授权的 MCP connector。让 Claude / Codex / Qwen CLI 帮你完成 Tinia 插件项目的创建、节点脚手架、编写 run.py、搭建测试流程、调试、打包发布全流程。",
-  "version": "1.2.10",
+  "version": "1.2.11",
   "author": {
     "name": "Bestfunc Technology",
     "email": "Great@bestfunc.com"
@@ -15,6 +15,14 @@
       "type": "http",
       "url": "https://t.bestfunc.com/api/v1/mcp",
       "httpUrl": "https://t.bestfunc.com/api/v1/mcp"
+    },
+    "tinia-file": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@bestfunc-com/tinia-file-mcp@latest"],
+      "env": {
+        "TINIA_ENDPOINT": "https://t.bestfunc.com"
+      }
     }
   }
 }
