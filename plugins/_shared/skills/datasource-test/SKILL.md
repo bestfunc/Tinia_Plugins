@@ -17,13 +17,14 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
 
 ## 上传走本地 MCP（任何部署都可用）
 
-文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（npm 包 `@bestfunc-com/tinia-file-mcp`，由 plugin 自动拉起）。原因：
+文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（esbuild bundle 跟 plugin 一起分发，零外部依赖）。原因：
 
 - 远程 MCP（连 Tinia Server）看不到 AI 本机文件 — 在 SaaS 部署直接没法上传
 - MCP 协议层 base64 内联占 AI context 太重 — 大 NVH 录音 OOM
 
-本地 MCP 在用户机器跑 Node 子进程，HTTP multipart 直传 server 现有的
-`/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**。
+实现：plugin 装载时 `${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js`（symlink 到 `_shared/local-mcp/tinia-file-mcp/index.js`，esbuild bundle 单文件 ~500KB 含所有依赖）通过 `node` 启动 stdio。HTTP multipart 直传 server 现有的 `/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**（saas / onprem / 本地 dev）。
+
+源码：[Tinia_Local_MCP](https://github.com/bestfunc/Tinia_Local_MCP)（独立仓库），改动后 `npm run deploy` 自动同步到 plugins。
 
 工具名：`mcp__tinia-file__upload_file_to_datasource`
 
