@@ -1,9 +1,9 @@
 ---
 name: composite-datasource
 display_name: 合成多通道数据源
-description: 把已有的 N 个 mono 数据源 stack 成一个多通道 composite 数据源 — 工业 NVH 常见场景（N 麦阵列各录 mono / 多次采集 mono 横拼对比）。AI 帮用户选源 + 配对方式 + 通道命名模板 → 创建 → 触发合成。下游分析节点零感知，用起来跟普通多通道数据源一样。
+description: 把已有的 N 个 mono 数据源 stack 成一个多通道 composite 数据源 — 工业 NVH 常见场景（N 麦阵列各录 mono / 多次采集 mono 横拼对比）。AI 帮用户选源 + 配对方式（自动 / 手工 / CSV）+ 通道命名模板 → 创建 → 触发合成。下游分析节点零感知，用起来跟普通多通道数据源一样。
 user-invocable: true
-allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_materialize,mcp__tinia__datasource_list_files,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview
+allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_materialize,mcp__tinia__datasource_list_files,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash
 ---
 
 # composite-datasource —— 合成多通道数据源
@@ -74,14 +74,86 @@ AI 不应该瞎猜，下面信息缺一项就反问用户：
 
 ## 配对方式选择决策
 
+三种模式，按优先级判断：
+
 ```
-用户的 mono 文件命名规范？
-├─ 有公共前缀（rec_001.wav, rec_002.wav）→ pair_by = "item_id_prefix"
-├─ 各源文件名乱但顺序对齐 → pair_by = "index"
-└─ 命名乱 + 顺序也乱 → 让用户先重命名 / 改用手工配对（D5 待加）
+用户给了 CSV 配对文件？
+├─ 是 → pair_by = "manual"，AI 读 CSV → 转 groups → 调 datasource_create
+│       （详见下面"AI 处理 CSV 配对文件"章节）
+└─ 否 → 看用户 mono 文件命名规范：
+        ├─ 有公共前缀（rec_001.wav, rec_002.wav）→ pair_by = "item_id_prefix"（推荐）
+        ├─ 各源文件名乱但顺序对齐 → pair_by = "index"
+        └─ 命名乱 + 顺序也乱 + 文件不多 → pair_by = "manual"，
+            AI 反问用户每组该怎么配，构造 groups 数组
 ```
 
 **默认 `item_id_prefix`** —— 大多数 NVH 录音都按 session ID 命名，前缀匹配最稳。
+
+**Manual 模式 schema**：
+
+```json
+{
+  "name": "...",
+  "source_kind": "composite",
+  "channel_template_id": 5,
+  "composite_config": {
+    "source_ids": [12, 13],
+    "pair_by": "manual",
+    "groups": [
+      {
+        "name": "rec_001.wav",
+        "channels": [
+          {"src_ds_id": 12, "src_item_id": "5"},
+          {"src_ds_id": 13, "src_item_id": "8"}
+        ]
+      }
+    ]
+  }
+}
+```
+
+注意：
+- `src_item_id` 必须是 **string** 形式的 datasource_uploads 行 id（不是 filename）
+- 用 `datasource_list_files(datasource_id)` 拿到的 `id` 字段，转 string 传过去
+- `groups[].channels[]` 顺序 = ch0..chN（跟 channel_template.channels 必须对齐）
+
+## AI 处理 CSV 配对文件
+
+用户场景："这是配对 CSV，帮我合成"。AI 应该：
+
+1. **读 CSV** —— 用 Bash `cat <path>` 拿全文（小文件直接读，大文件 head 看 header + 抽样）
+2. **解析 header** —— 第一行通常是 `group_name,ch0_source,ch0_item,ch1_source,ch1_item,...`
+3. **datasource_list** 拿所有 ds 的 `name → id` 映射
+4. **对每个用到的 source ds 调 `datasource_list_files`** 拿 `filename → id` 映射
+5. **逐行解析数据** —— 对每行：
+   - `group_name` → `groups[i].name`
+   - `chN_source` → 在 ds 列表里按 name 查 id → `groups[i].channels[N].src_ds_id`
+   - `chN_item` → 在该 ds 的 files 里按 filename 查 id → `groups[i].channels[N].src_item_id`（转 string）
+6. **datasource_create** 用 manual 模式 + groups
+7. **datasource_materialize** 触发合成
+
+**Bash 读 CSV 示例**：
+
+```bash
+cat /path/to/composite.csv
+# 或大文件先看结构：
+head -5 /path/to/composite.csv
+```
+
+AI 在内存里 parse 即可（Python `csv` 模块 / 简单 split 都行），不用执行外部 csv 解析工具。
+
+**Critical**：CSV 里 `chN_item` 是文件名（如 `r001.wav`），后端 manual 模式需要的是 datasource_uploads 行的数字 id。AI 必须做这个映射，**不能直接把文件名传给 `src_item_id`** —— 否则 materialize 时报"找不到 item"。
+
+**典型 CSV 示例**：
+
+```csv
+# Tinia Composite DataSource Pairing v1
+group_name,ch0_source,ch0_item,ch1_source,ch1_item
+rec_001,Mic_FL_recordings,r001.wav,Mic_FR_recordings,r001.wav
+rec_002,Mic_FL_recordings,r002.wav,Mic_FR_recordings,r002.wav
+```
+
+注意支持 `#` 注释行 + 空行（解析时跳过）。如果用户的 CSV 第一列不是 `group_name`，反问用户列名映射。
 
 ## 长度对齐选择
 
@@ -136,17 +208,66 @@ AI：
 8. （可选）跑 flow 验证 _meta.channel_label = Mic_L / Mic_R
 ```
 
+## 典型对话脚本：CSV 模式
+
+```
+用户："/Users/me/recordings/composite_pair.csv 这是配对文件，帮我合成 5 通道做分析。"
+
+AI:
+1. Bash: cat /Users/me/recordings/composite_pair.csv
+   → 拿到 CSV 文本
+   → 解析 header: group_name, ch0_source, ch0_item, ch1_source, ch1_item, ...
+   → 数据行（10 组）
+
+2. datasource_list → 拿到 ds name → id 映射：
+   {"Mic_FL_recordings": 12, "Mic_FR_recordings": 13, "Accel_X_recordings": 14, ...}
+
+3. 对每个用到的 source ds 调 datasource_list_files：
+   datasource_list_files(12) → {"r001.wav": 100, "r002.wav": 101, ...}
+   datasource_list_files(13) → {"r001.wav": 200, "r002.wav": 201, ...}
+   ... (5 个 source ds → 5 次调用，结果 cache 在 AI 内存里)
+
+4. 解析 + 映射：CSV 每行的 chN_source/chN_item 转成 (src_ds_id, src_item_id)
+   构造 groups 数组
+
+5. (可选) channel_template_create({n_channels: 5, channels: [...]}) → tpl_id
+
+6. datasource_create({
+     name: "测试 5 通道_composite",
+     source_kind: "composite",
+     channel_template_id: tpl_id,
+     composite_config: {
+       source_ids: [12, 13, 14, 15, 16],   // 用到的源（自动从 groups 里 collect）
+       pair_by: "manual",
+       length_mode: "truncate_min",
+       groups: [
+         {name: "rec_001.wav", channels: [{src_ds_id: 12, src_item_id: "100"}, ...]},
+         {name: "rec_002.wav", channels: [{src_ds_id: 12, src_item_id: "101"}, ...]},
+         ...
+       ]
+     }
+   }) → composite_ds_id
+
+7. datasource_materialize(composite_ds_id)
+   → 报告 {groups_total: 10, groups_created: 10}
+
+8. datasource_list_files(composite_ds_id) 给用户看合成结果
+```
+
 ## 失败排查
 
 | 现象 | 可能原因 | 处理 |
 |------|---------|------|
-| `datasource_create` 报 "composite_config.source_ids 不能为空" | source_ids 没传 / 传了空数组 | 反问用户要哪些源 |
+| `datasource_create` 报 "composite_config.source_ids 不能为空" | 自动模式时 source_ids 没传 | 反问用户要哪些源 |
+| `datasource_create` 报 "composite_config.groups 不能为空" | manual 模式时 groups 没传 | 检查 CSV 解析或反问用户配对结构 |
+| `datasource_create` 报 "groups[i] 通道数=N 与第一组=M 不一致" | manual 模式各组通道数对不齐 | 检查 CSV 行长度，可能某行多了/少了列 |
 | `datasource_materialize` 报 "ch0 sr=44100 != ch1 sr=48000" | 源 sr 不一致 | 告诉用户必须一致；可建议先转码或选其他源 |
 | 报 "expect mono, got 2 channels" | 源里有立体声/多通道文件混进来了 | composite 只接 mono；告诉用户哪个源不是 mono |
 | 报 "audio_format=3 not supported" | 源是 float32 wav | 当前只支持 PCM int16；告诉用户先转码 |
 | 报 "ch0 长度=480000 与 ch1=479000 不一致 (length_mode=strict)" | 严格对齐但源长度不等 | 改 length_mode="truncate_min" 重 update + 重 materialize |
 | 报 "配对后没有可合成 group" (item_id_prefix) | 各源文件命名前缀不重合 | 让用户检查命名 / 改 pair_by="index" |
 | 报 "ds=12 items=10 与 ds=11 items=12 不等" (index) | 各源 item 数不等 | 让用户对齐 / 改 pair_by="item_id_prefix" |
+| 报 "group=X ch0: ds=12 找不到 item=r001.wav" (manual) | src_item_id 传了文件名而非 id | 用 datasource_list_files 把 filename 映射成 id 字符串 |
 | 跑分析后 _meta.channel_label 还是 ch0/ch1 | datasource 没设 channel_template_id；或 composite 没 materialize 成功 | datasource_describe 检查 channel_template_id 字段 + composite_config.materialized |
 
 ## 决策细则（AI 必看）
