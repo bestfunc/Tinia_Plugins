@@ -1,7 +1,7 @@
 ---
 name: datasource-test
 display_name: 测试数据源 + 通道命名模板
-description: 端到端测试 Tinia 数据源功能 — 创建数据源、生成多通道 wav 上传、创建通道命名模板、应用模板到数据源、用流程节点验证 ChannelMeta 全链路传播。覆盖 Phase B 数据源页 UI + Phase C 通道命名模板系统。AI 在本机用 numpy/scipy 生成测试 wav 后 base64 上传，不依赖外部资源。
+description: 端到端测试 Tinia 数据源功能 — 创建数据源、生成或上传多通道 wav、创建通道命名模板、应用模板、用流程节点验证 ChannelMeta 全链路传播。覆盖 Phase B 数据源页 UI + Phase C 通道命名模板系统。AI 用 Bash + Python 在本机生成 wav 写到 /tmp，再用 path 上传（无大小限制）；用户已有的本机 wav 也直接传 path 即可。
 user-invocable: true
 allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_upload_files,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash
 ---
@@ -15,14 +15,21 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
 - 端到端测试 ChannelMeta 全链路（datasource → 节点 → 分析输出 _meta.channel_label）
 - 写回归测试（CRUD + 模板应用 + 删除级联）
 
+## 部署模式约束
+
+`datasource_upload_files` **仅在非 SaaS 部署下可用**（开发模式 / 桌面模式 / 自建 server）。
+SaaS 部署（`TINIA_EDITION=saas`，server 在公网）下 server 看不到 AI 本机文件，
+请用前端 UI 拖拽上传或先 SSH 把文件拷到 server 机器上。
+
 ## 核心流程
 
 ```
 1. datasource_create("test_datasource_xxx")  ← 建测试数据源
         ↓
-2. AI 在 Bash 里用 Python 生成 wav 字节（numpy + scipy.io.wavfile）
+2. AI 在 Bash 里用 Python 生成 wav 写到 /tmp/test.wav
+   或：用户已经有 /Users/.../recording.wav，直接传 path
         ↓
-3. base64 编码 → datasource_upload_files
+3. datasource_upload_files(files: [{path: "/tmp/test.wav"}])
         ↓
 4. channel_template_create({n_channels: N, channels: [...]})  ← 建模板
         ↓
@@ -32,48 +39,56 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
         ↓
 7. （可选）flow_create + 跑 fft → 看 _meta.channel_label 是否对
         ↓
-8. cleanup：datasource_delete + channel_template_delete
+8. cleanup：datasource_delete + channel_template_delete + 删除 /tmp 文件
 ```
 
-## 生成测试 wav 的标准 Python（必看）
+## 生成测试 wav（写到 /tmp）
 
-AI 用 Bash 跑 Python，**不要写到磁盘**，直接 base64 输出。这是模板代码：
+AI 用 Bash 跑 Python 把 wav 写到 /tmp/<name>.wav，再传 path。模板代码：
 
-```python
-import io, base64, numpy as np
+```bash
+python3 <<'EOF'
+import numpy as np
 from scipy.io import wavfile
 
-# 参数
 sr = 48000
 duration_s = 2.0
 freq = 1000.0
 amp = 0.5
 n_channels = 5
 
-# 生成单通道 sine
 t = np.arange(int(duration_s * sr)) / sr
 mono = (amp * np.sin(2 * np.pi * freq * t) * 32767).astype(np.int16)
+samples = mono if n_channels == 1 else np.tile(mono[:, np.newaxis], (1, n_channels))
 
-# 多通道：所有通道相同（也可每通道不同 freq 模拟阵列）
-if n_channels == 1:
-    samples = mono
-else:
-    samples = np.tile(mono[:, np.newaxis], (1, n_channels))  # WAV 是 (n_samples, n_ch)
-
-# 写到 BytesIO 不落盘
-buf = io.BytesIO()
-wavfile.write(buf, sr, samples)
-content_base64 = base64.b64encode(buf.getvalue()).decode()
-print(content_base64)
+# WAV 约定：(n_samples, n_ch)
+wavfile.write("/tmp/test_5ch.wav", sr, samples)
+print("OK /tmp/test_5ch.wav")
+EOF
 ```
 
-调 Bash：
+然后：
 
-```bash
-python3 -c "<上面的代码>" | tr -d '\n'
+```
+datasource_upload_files(
+  datasource_id=ds_id,
+  files=[{"path": "/tmp/test_5ch.wav"}]   # filename 自动用 basename
+)
 ```
 
-把输出捕获到变量给 `datasource_upload_files`。
+**用户已有文件**：直接传 path 不需要预处理：
+
+```
+datasource_upload_files(
+  datasource_id=ds_id,
+  files=[
+    {"path": "/Users/me/recordings/engine_idle.wav"},
+    {"path": "/Users/me/recordings/engine_full.wav"}
+  ]
+)
+```
+
+server 端流式读 + sha256 去重 + 落 blob，无大小限制（GB 级 NVH 录音 OK）。
 
 ## 测试模板
 
@@ -81,9 +96,9 @@ python3 -c "<上面的代码>" | tr -d '\n'
 
 ```
 1. ds_id = datasource_create("test_dual_ch")
-2. 生成 2 通道 sine 1k @ 60dB SPL：
-   sr=48000, n_channels=2, freq=1000, amp=0.063
-3. datasource_upload_files(ds_id, [{filename:"stereo.wav", content_base64: "..."}])
+2. Bash 生成：python3 <<EOF ... wavfile.write("/tmp/stereo_test.wav", 48000, samples) EOF
+   2 通道 sine 1k @ 60dB SPL：sr=48000, n_channels=2, freq=1000, amp=0.063
+3. datasource_upload_files(ds_id, [{path: "/tmp/stereo_test.wav"}])
 4. tpl_id = channel_template_create({
      name: "test_dual_LR",
      n_channels: 2,
@@ -94,7 +109,7 @@ python3 -c "<上面的代码>" | tr -d '\n'
    })
 5. channel_template_apply(ds_id, tpl_id)
 6. datasource_describe(ds_id) → 验证 channel_template_id == tpl_id
-7. cleanup: datasource_delete(ds_id), channel_template_delete(tpl_id)
+7. cleanup: datasource_delete(ds_id), channel_template_delete(tpl_id), rm /tmp/stereo_test.wav
 ```
 
 判定：5 步全部 OK + 第 6 步返回的 channel_template_id 等于 tpl_id。
@@ -103,11 +118,11 @@ python3 -c "<上面的代码>" | tr -d '\n'
 
 ```
 1. ds_id = datasource_create("driving_2026_test")
-2. 用 Bash + Python 生成 5 通道 wav：
+2. Bash 生成 5 通道 wav 写到 /tmp/driving_5ch.wav：
    - ch0/1: sine 1kHz amp=0.063（模拟双麦）
    - ch2/3/4: white_noise amp=0.01（模拟三轴加速度）
    - sr=48000, duration=3s
-3. datasource_upload_files
+3. datasource_upload_files(ds_id, [{path: "/tmp/driving_5ch.wav"}])
 4. tpl_id = channel_template_create({
      name: "驾驶舱 5 通道",
      n_channels: 5,
@@ -162,7 +177,8 @@ python3 -c "<上面的代码>" | tr -d '\n'
 
 | 现象 | 可能原因 |
 |------|---------|
-| `datasource_upload_files` 返回 skipped > 0 | base64 字符串里有换行 / 空格 → 用 `tr -d '\n'` 清理 |
+| `datasource_upload_files` 返回 skipped > 0 | 看返回的 skip_reasons 数组，常见：path 不是绝对路径 / 文件不存在 / 权限不够 |
+| SaaS 部署调 datasource_upload_files 返回错误 | "SaaS 部署不可用" — 是预期行为，请用前端 UI 拖拽上传 |
 | 文件大小 = 30 字节但是合法 wav | 可能 numpy stack 维度搞反，应该 (n_samples, n_ch) 不是 (n_ch, n_samples) |
 | `channel_template_create` 报 "channels 长度必须等于 n_channels" | 数组长度跟 n_channels 不一致，检查 |
 | `datasource_describe` 没看到 channel_template_id | 当前 describe 只在 v1.23+ 后端返回这个字段，旧版可能没 |
@@ -170,14 +186,11 @@ python3 -c "<上面的代码>" | tr -d '\n'
 
 ## 决策细则（AI 必看）
 
-### 文件大小限制
+### 文件大小
 
-`datasource_upload_files` 走 MCP request body，单次建议总 < 50MB。大文件用前端 UI 拖拽（浏览器多 part 上传）。WAV 估算：
-- 单声道 48k 1秒 ≈ 96KB
-- 5 通道 48k 3秒 ≈ 1.4MB
-- 5 通道 48k 30秒 ≈ 14MB
-
-测试场景几乎不会超 5MB。
+`datasource_upload_files` 用 path 模式，server 直接读本地文件，**无大小限制**。
+GB 级 NVH 录音也能上传 — 只要 server 跟 AI 同机（非 SaaS 部署）。
+SaaS 部署下用前端 UI 拖拽。
 
 ### 上传后是否要等？
 
