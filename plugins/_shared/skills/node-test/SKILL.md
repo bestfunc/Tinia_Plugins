@@ -102,14 +102,23 @@ spectrum_viewer
 ```
 signal_generator (impulse, 2s, sr=48k, amp=1.0)
   ↓
-<被测滤波节点>
+<被测滤波节点>      ← ⚠ 仅 zero_phase=false（单向 sosfilt）能这样测
   ↓
 fft_spectrum
   ↓
 spectrum_viewer
 ```
 
-冲激响应的 FFT **直接就是**频响 H(f)，最干净。
+冲激响应的 FFT **直接就是**频响 H(f)，最干净 —— **但不要在 zero_phase=true 时用**：
+
+`scipy.signal.sosfiltfilt`（即 zero_phase）在两端做镜像反射 padding 近似零相位。
+impulse 在 sample[0] 时反射后 sample[-1] 也 = 1，**两端各出一个伪冲激** → 频谱失真。
+
+实测案例：4 阶 Butterworth LP fc=1k + zero_phase=true：
+- 期望 fc=-6dB / 2k=-48dB（filtfilt 等效 8 阶）
+- 实测 1k=-53dB / 2k=-59dB / 3k=-63dB → 滚降假象
+
+测 zero_phase 频响**只能用 chirp 或 white_noise PSD 平均**（模板 1 的扫频法适用）。
 
 ### 模板 2：滤波器衰减点验
 
@@ -272,6 +281,7 @@ flow_node_output_preview  ← 跟"上次已知好"的输出对比
 要测什么 → 选什么 stimulus
 
 频响 / 频率特性          → chirp（看完整曲线）or impulse（最快，spectrum = h(f)）
+                            ⚠ 测 zero_phase=true 滤波器只能用 chirp（impulse 会被 filtfilt 边界反射污染）
 某频点的精确衰减         → sine（单频，level_meter 读 dB）
 谐波失真                 → square / sawtooth（含丰富谐波）
 统计 / regression        → white_noise / pink_noise (seed > 0)
