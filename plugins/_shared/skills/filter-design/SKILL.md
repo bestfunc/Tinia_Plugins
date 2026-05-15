@@ -179,6 +179,22 @@ signal_generator (impulse, amp=1.0) → <被测滤波节点> → fft_spectrum
                                             ↑ spectrum 直接 = 滤波器完整频响 H(f)
 ```
 
+### ⚠️ 严重坑：测 zero_phase 滤波器**不能用 impulse**
+
+`scipy.signal.sosfiltfilt`（即 `zero_phase=true`）在两端做**镜像反射 padding** 来近似零相位。
+当 stimulus 是 impulse（sample[0]=1，其余全 0）时，反射后 sample[-1] 也 = 1，
+冲激响应**两端各出一个伪冲激** → 频谱完全失真，看到的"滚降"不是滤波器真实频响。
+
+实测案例（4 阶 Butterworth LP fc=1k + zero_phase=true）：
+- 期望 fc=-6dB / 2k=-48dB（filtfilt 等效 8 阶）
+- 实测 1k=-53dB / 2k=-59dB / 3k=-63dB → **滚降假象**
+
+测 zero_phase 频响**改用下面任一**：
+- **chirp 扫频**（最准）：`signal_generator (chirp 20-20000 log, duration ≥ 5s)` —— 长信号让 padding 反射的伪响应被淹没
+- **white_noise + PSD 平均**：`signal_generator (white_noise seed=42, duration ≥ 10s)` —— 输出 PSD ÷ 输入 PSD = 频响
+
+非 zero_phase（默认单向 sosfilt）测 impulse 没这个问题。
+
 完整测试方法（4 种 stimulus / 5 种模板 / 失败排查）见专用 skill：**`/skill:node-test`**。
 
 ## 边界情况告知
@@ -188,6 +204,7 @@ signal_generator (impulse, amp=1.0) → <被测滤波节点> → fft_spectrum
 - **截止频率 ≥ Nyquist**（采样率/2）→ 节点会跳过该 item，要么降低 cutoff，要么提高 SR
 - **bandpass / bandstop 的 cutoff_low ≥ cutoff_high** → 设计失败，修正参数
 - **zero_phase=true 但信号太短**（< ~3 × order）→ 节点自动降级单向 + warning，告诉用户考虑减小 order
+- **zero_phase=true + impulse stimulus 测频响** → filtfilt 镜像 padding 让 impulse 在两端各出一个伪冲激，频谱失真。改用 chirp / white_noise PSD 平均法（详见"测试与验证"章节的"严重坑"）
 - **FIR taps > 信号长度** → 跳过该 item，要么减小 taps 要么用更长信号
 - **B 计权（已淘汰）** → 提醒用户 IEC 61672 已弃用，除非复测旧数据否则用 A 或 C
 

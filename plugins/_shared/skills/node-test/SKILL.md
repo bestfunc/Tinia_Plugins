@@ -102,14 +102,23 @@ spectrum_viewer
 ```
 signal_generator (impulse, 2s, sr=48k, amp=1.0)
   ↓
-<被测滤波节点>
+<被测滤波节点>      ← ⚠ 仅 zero_phase=false（单向 sosfilt）能这样测
   ↓
 fft_spectrum
   ↓
 spectrum_viewer
 ```
 
-冲激响应的 FFT **直接就是**频响 H(f)，最干净。
+冲激响应的 FFT **直接就是**频响 H(f)，最干净 —— **但不要在 zero_phase=true 时用**：
+
+`scipy.signal.sosfiltfilt`（即 zero_phase）在两端做镜像反射 padding 近似零相位。
+impulse 在 sample[0] 时反射后 sample[-1] 也 = 1，**两端各出一个伪冲激** → 频谱失真。
+
+实测案例：4 阶 Butterworth LP fc=1k + zero_phase=true：
+- 期望 fc=-6dB / 2k=-48dB（filtfilt 等效 8 阶）
+- 实测 1k=-53dB / 2k=-59dB / 3k=-63dB → 滚降假象
+
+测 zero_phase 频响**只能用 chirp 或 white_noise PSD 平均**（模板 1 的扫频法适用）。
 
 ### 模板 2：滤波器衰减点验
 
@@ -238,6 +247,31 @@ signal_generator (sine 1k, channels=1) → channel_select (channels=0) → fft_s
 preview hash 应跟没经过 select 的等价流程一致
 ```
 
+#### ⚠️ channel_select mix_mode=sum 振幅理解（容易踩的坑）
+
+`channel_select` 的 `mix_mode=sum` **本身不除以 N**（`out = selected.sum(axis=0)`，
+意图是"工程 sum 不归一化"），但 sum 后峰值 > 1.0 时 **下游 SDK AudioInput 会做
+peak 归一化到 [-1, 1]** 防溢出 —— 这导致 fft / level_meter 看到的振幅会被压缩。
+
+**统计预期**：
+
+| 场景 | 时域 peak | SDK 归一化后 | fft 主峰（amp=0.5 输入）|
+|------|----------|-------------|------------------------|
+| sum N 个**同相同频** sine（H 轮）| N × amp = 2.0（N=4，amp=0.5）| → 1.0 | -7.7 dB（amp 1.0 + hann scallop）|
+| sum N 个**异频** sine（S3）| ≈ √N × amp ≈ 1.0（统计期望，瞬时可能略 > 1）| → 0.5/peak | 实测 -15.5 dB |
+| sum 异频不超 1.0 | ≤ 1.0 | 不动 | -13.6 dB（跟单 sine 一致）|
+
+**两个判定要点**：
+
+1. 看 `channel_select` 节点的 logs —— sum + peak > 1.0 时节点会 `emit_log("warn", ...)`
+   告诉你"sum 后峰值 X.XX > 1.0，下游 load_audio 会归一化"。看到这条 warning =
+   绝对幅度不可信，**只能看相对结构**（频率/相位/通道独立性）
+2. 振幅精度场景**应该用 `mix_mode=mean`**（除以 N，确保 ≤ 1.0，幅度可信）
+
+`mean` vs `sum` 的语义选择：
+- **mean**：物理意义 = 多通道平均（取平均场量），振幅可信，下游 dB 准
+- **sum**：工程上"叠加场量"（多麦贡献叠加），振幅会受 SDK 归一化干扰，**适合定性看结构**而非定量看 dB
+
 ### 模板 9：阶跃响应（系统识别）
 
 要测被试系统的"阶跃响应"（看上升时间 / 过冲 / 振铃）必须用真 unit step，**不是** DC 全程恒值：
@@ -272,6 +306,7 @@ flow_node_output_preview  ← 跟"上次已知好"的输出对比
 要测什么 → 选什么 stimulus
 
 频响 / 频率特性          → chirp（看完整曲线）or impulse（最快，spectrum = h(f)）
+                            ⚠ 测 zero_phase=true 滤波器只能用 chirp（impulse 会被 filtfilt 边界反射污染）
 某频点的精确衰减         → sine（单频，level_meter 读 dB）
 谐波失真                 → square / sawtooth（含丰富谐波）
 统计 / regression        → white_noise / pink_noise (seed > 0)

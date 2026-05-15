@@ -217,3 +217,6 @@ Server，不过 MCP 协议层）。任何部署模式都通用（SaaS / OnPrem /
 - **node-test** 是测节点；**datasource-test** 是测数据源 / 模板
 - **flow-author** 搭流程；本 skill 不直接搭流程（只准备数据），需要测端到端时调 flow_create 串起来
 - 测多通道分析（A4 范畴）应该用 signal_generator 节点（更快，不用上传）；本 skill 主要测**数据源管理本身**和**模板系统**
+- **composite-datasource** 帮用户**实际创建**合成多通道数据源（N 个 mono → 多通道）；
+  本 skill 是测试导向（验证 datasource + 模板 + ChannelMeta 全链路）。如果用户说"帮我合成"
+  应该走 composite-datasource。如果用户说"测试一下"才走本 skill。
