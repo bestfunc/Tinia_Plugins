@@ -1,0 +1,28 @@
+{
+  "name": "tinia-desktop",
+  "description": "Tinia 桌面单机版（localhost:18720，对应 Windows / macOS 安装的 Tinia.exe / Tinia.app 内嵌 daemon）的 AI 开发助手：16 个 skill + OAuth 自动授权的 MCP connector。让 Claude / Codex / Qwen CLI 帮你完成 Tinia 插件项目的创建、节点脚手架、编写 run.py、搭建测试流程、调试、打包发布全流程。",
+  "version": "1.2.21",
+  "author": {
+    "name": "Bestfunc Technology",
+    "email": "Great@bestfunc.com"
+  },
+  "homepage": "https://github.com/bestfunc/Tinia",
+  "repository": "https://github.com/bestfunc/Tinia_Plugins",
+  "license": "Apache-2.0",
+  "keywords": ["tinia", "mcp", "acoustic", "data-analysis", "plugin-dev", "node-graph", "desktop", "standalone"],
+  "mcpServers": {
+    "tinia": {
+      "type": "http",
+      "url": "http://localhost:18720/api/v1/mcp",
+      "httpUrl": "http://localhost:18720/api/v1/mcp"
+    },
+    "tinia-file": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js"],
+      "env": {
+        "TINIA_ENDPOINT": "http://localhost:18720"
+      }
+    }
+  }
+}
