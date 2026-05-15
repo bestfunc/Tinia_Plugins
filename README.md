@@ -4,15 +4,17 @@ Tinia 声学数据分析平台的 AI 开发助手 plugin 市场，支持 Claude 
 
 一条命令接入 **16 个 AI skill + OAuth 自动授权的 MCP connector**，覆盖插件项目创建、节点脚手架生成、源码搜索、`run.py` 编写、分析流程搭建（事务批操作）、节点测试调试、版本管理、打包发布、审批等场景。MCP 认证走 OAuth，首次使用自动弹出 Tinia 浏览器授权页，无需手动配 token。
 
-**三个部署变体，按场景选一个**：
+**四个部署变体，按场景选一个**：
 
 | Plugin | 适用场景 | MCP 地址 |
 |---|---|---|
 | **`tinia`** | SaaS 版（公网账号） | `https://tinia-saas.bestfunc.com/api/v1/mcp` |
 | **`tinia-onprem`** | 公司私有化部署 | `https://t.bestfunc.com/api/v1/mcp` |
+| **`tinia-desktop`** | 桌面单机版（Windows / macOS 装 Tinia.exe / Tinia.app） | `http://localhost:18720/api/v1/mcp` |
 | **`tinia-local`** | 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp` |
 
-> 三个变体共享同一组 16 个 skill（git symlink 到 `_shared`），仅 MCP server 地址不同。
+> 四个变体共享同一组 16 个 skill（git symlink 到 `_shared`），仅 MCP server 地址不同。
+> `tinia-desktop` vs `tinia-local`：前者是装机版桌面 daemon（端口 18720），后者是开发者跑 `./start-dev.sh` 的 Vite dev（端口 18722），互不冲突可同时装。
 
 ## 这是什么
 
@@ -31,9 +33,9 @@ Tinia 是基于节点图的声学分析平台（[主项目](https://github.com/b
 ```
 Tinia_Plugins/
 ├── .claude-plugin/
-│   └── marketplace.json              ← Marketplace 定义（列三个变体）
+│   └── marketplace.json              ← Marketplace 定义（列四个变体）
 ├── plugins/
-│   ├── _shared/skills/               ← 16 个 Skill（共享源，三个变体软链到这里）
+│   ├── _shared/skills/               ← 16 个 Skill（共享源，四个变体软链到这里）
 │   │   ├── quickstart/
 │   │   ├── types-reference/
 │   │   ├── sdk-reference/
@@ -56,6 +58,9 @@ Tinia_Plugins/
 │   ├── tinia-onprem/                 ← 公司私有化版（t.bestfunc.com）
 │   │   ├── .claude-plugin/plugin.json
 │   │   └── skills → ../_shared/skills
+│   ├── tinia-desktop/                ← 桌面单机版（localhost:18720）
+│   │   ├── .claude-plugin/plugin.json
+│   │   └── skills → ../_shared/skills
 │   └── tinia-local/                  ← 本地开发版（localhost:18722）
 │       ├── .claude-plugin/plugin.json
 │       └── skills → ../_shared/skills
@@ -67,7 +72,7 @@ Tinia_Plugins/
 
 ### 前置条件
 
-- 一个能访问的 Tinia 实例（公网 SaaS / 公司私有化 / 本地 dev 至少一种）
+- 一个能访问的 Tinia 实例（公网 SaaS / 公司私有化 / 桌面单机 / 本地 dev 至少一种）
 - 你的账号所在用户组开启了 `mcp:dev` / `mcp:nodes` / `mcp:flow` / `mcp:plugins` 模块（系统设置 → 用户组管理，超管或组织管理员可改）
 
 ### Claude Code（原生支持）
@@ -76,10 +81,11 @@ Tinia_Plugins/
 # 1. 添加 marketplace（在 Claude Code 会话里输入）
 /plugin marketplace add bestfunc/Tinia_Plugins
 
-# 2. 安装对应变体（三选一，按你的部署场景）
-/plugin install tinia@tinia-plugins         # SaaS
-/plugin install tinia-onprem@tinia-plugins  # 公司私有化
-/plugin install tinia-local@tinia-plugins   # 本地开发
+# 2. 安装对应变体（四选一，按你的部署场景）
+/plugin install tinia@tinia-plugins          # SaaS
+/plugin install tinia-onprem@tinia-plugins   # 公司私有化
+/plugin install tinia-desktop@tinia-plugins  # 桌面单机版（Windows / macOS）
+/plugin install tinia-local@tinia-plugins    # 本地开发（start-dev.sh）
 
 # 3. 查看 MCP 连接状态
 /mcp
@@ -90,14 +96,15 @@ Tinia_Plugins/
 # 也可以 /mcp authenticate tinia 主动触发
 ```
 
-> 同时装多个变体（如 `tinia` 主用 + `tinia-local` 开发）完全 OK，两个 connector 在 Claude Code 里各自有独立 OAuth token，互不干扰。
+> 同时装多个变体完全 OK，每个 connector 在 Claude Code 里各自有独立 OAuth token 互不干扰。常见组合：`tinia-desktop` 主用 + `tinia-local` 开发主仓库；或 `tinia`（SaaS） + `tinia-onprem`（公司）。
 
 ### Qwen Code（自动转换格式）
 
 ```bash
-# 1. 安装扩展（marketplace-url:plugin-name 格式，三选一）
+# 1. 安装扩展（marketplace-url:plugin-name 格式，四选一）
 qwen extensions install bestfunc/Tinia_Plugins:tinia
 qwen extensions install bestfunc/Tinia_Plugins:tinia-onprem
+qwen extensions install bestfunc/Tinia_Plugins:tinia-desktop
 qwen extensions install bestfunc/Tinia_Plugins:tinia-local
 
 # 2. 重启 Qwen Code 让 MCP 配置生效
