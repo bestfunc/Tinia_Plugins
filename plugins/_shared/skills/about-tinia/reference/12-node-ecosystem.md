@@ -21,7 +21,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 ## 当前节点清单（截至 2026 H1）
 
-> Tinia 官方节点（`bestfunc/*` namespace），约 33 个。覆盖核心声学 / 振动算法 + 数据源 + 可视化。
+> Tinia 官方节点（`bestfunc/*` namespace），共 33+ 个。覆盖核心声学 / 振动算法 + 数据源 + 可视化。
 
 ### 数据源 / 输入
 
@@ -31,7 +31,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `signal_generator` | 合成信号（白噪声 / 正弦 / 扫频，多通道）|
 | `materialize_node` | 把 lazy 数据集固化到 blob |
 
-### 信号处理
+### 信号处理 / 数据准备
 
 | 节点 | 说明 |
 |---|---|
@@ -40,6 +40,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `convergent_trim` | 收敛剔除（去除异常段）|
 | `weighting_filter` | A/B/C 计权滤波 |
 | `fir_filter` | FIR 数字滤波器 |
+| `iir_filter` | IIR 数字滤波器（巴特沃斯 / 切比雪夫等）|
 | `channel_split` | 多通道拆单通道 |
 | `channel_select` | 选择部分通道 |
 
@@ -52,36 +53,49 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `octave_analysis` | 倍频程 / 三分之一倍频程 |
 | `spectrum_viewer` | 频谱图可视化 |
 
-### 时域 / 时频
+### 时域 / 时频特征
 
 | 节点 | 说明 |
 |---|---|
 | `fbank_extract` | Filter bank 特征 |
 | `st_features` | 短时统计特征 |
+| `attribute_extract` | 信号属性提取 |
+| `baseline_stats` | 基线统计（建立参考样本）|
 
-### 心理声学
+### 心理声学指标
 
 | 节点 | 说明 |
 |---|---|
-| `roughness` | 心声 roughness（基于 mosqito）|
-| 计划：`loudness`、`sharpness`（Order Tracking 战役配套）|
+| `loudness` | 响度（Zwicker 标准）|
+| `sharpness` | 尖锐度 |
+| `roughness` | 粗糙度（基于 mosqito）|
+| `tonality` | 音调度（Tone-to-Total Ratio）|
+| `tnr` | TNR（Tone-to-Noise Ratio）|
 
-### 指标 / 可视化
+### 指标计算 / 整理
 
 | 节点 | 说明 |
 |---|---|
 | `level_meter` | 声级表（dBA / dBZ 等）|
-| `indicator_viewer` | 指标表格 / 趋势图 |
+| `indicator_math` | 指标数学运算（加减乘除 / 阈值判断等）|
 | `indicator_merge` | 多源指标合并 |
-| `matrix_view` | 矩阵可视化 |
+| `feature_merge` | 多源特征合并 |
+| `feature_normalize` | 特征归一化（Z-score / Min-Max 等）|
+| `annotation_merge` | 多源段落标注合并 |
 
-### 高级分析
+### 可视化
+
+| 节点 | 说明 |
+|---|---|
+| `indicator_viewer` | 指标表格 / 趋势图 |
+| `matrix_view` | 矩阵可视化（如混淆矩阵 / 相关性矩阵）|
+
+### 高级分析 / 异常检测
 
 | 节点 | 说明 |
 |---|---|
 | `cluster_explore` | 聚类探索（PCA / UMAP 降维 + 可视化）|
 | `zscore_anomaly` | Z-score 异常检测 |
-| `tnr` | TNR（Tone-to-Noise Ratio）|
 
 ### 仪表盘
 
@@ -92,8 +106,126 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 ### 节点开发节奏
 
 - 节点列表持续扩充，每月新增 3-10 个
-- 2026 H2 三波交付清单详见 `08-roadmap.md`
+- 详细规划节点路线见下方"规划节点路线图"
 - 跟 HEAD 134 项笛卡尔积清单对比 → 详见 `06-competitive-landscape.md`
+
+---
+
+## 规划节点路线图
+
+> ⚠ 以下节点**尚未实现**，按 2026 H2 三波交付 + 2027 规划。具体优先级和时间可能调整。
+
+### 2026 H2 第一波（5-6 月）—— "这是专业 NVH 工具"
+
+| 节点 | 说明 | 价值 |
+|---|---|---|
+| `stft` | 短时傅里叶变换 | 时频联合分析基础 |
+| `spectrogram` | 频谱图（基于 STFT 的可视化）| NVH 工程师每天必用 |
+| `audio_player` | 音频播放器（联播频谱）| 频谱跟原始音频联动 |
+| `psd_welch` | Welch 法功率谱密度估计 | 平稳信号谱估计标准方法 |
+| `time_domain_stats` | 时域统计套件（RMS / Crest / Kurtosis 等）| 振动信号基础指标 |
+| **基础设施增强**：物理量+单位系统贯通（Pa / g / m/s，calibration 完整链路）| | 让数据有正确"物理量+单位"标签 |
+| **报告导出**：PDF / Word / PPT，4 个内置模板 | | 不是节点，是平台级导出能力 |
+| **多运行 overlay 对比** | | 不是节点，是 Viewer 增强 |
+
+### 2026 H2 第二波（7-9 月）—— Order Tracking 战役
+
+> 旋转机械分析核心，汽车 NVH 客户的"够用门槛"。
+
+| 节点 | 说明 | 价值 |
+|---|---|---|
+| `tach_input` | 转速通道输入（Tachometer 信号解析）| RPM 处理基础 |
+| `rpm_resample` | 角度域重采样（按转速插值到等角度采样）| 阶次分析前置 |
+| `order_spectrum` | 阶次谱（频率轴 → 阶次轴）| 旋转机械经典分析 |
+| `campbell_plot` | Campbell 图（阶次 vs RPM 三维）| NVH 演化可视化 |
+| `order_tracker` | 阶次跟踪器（提取某阶次能量 vs RPM）| 主谐波 / 齿轮啮合频率分析 |
+| `runup_detect` | Run-up / Coast-down 工况识别 | 自动从信号中识别启停段 |
+| `psychoacoustic_vs_rpm` | 心声指标 vs RPM（在现有 loudness / sharpness / roughness 接入 RPM 横轴）| 心声-工况联合 |
+| `can_signal_input` | CAN 总线信号接入（简版）| 整车信号集成 |
+| `obd_input` | OBD-II 信号接入 | 整车信号集成 |
+
+### 2026 H2 第三波（10-11 月）—— System 大类 + PdM 抢跑
+
+| 节点 | 说明 | 价值 |
+|---|---|---|
+| `frf_estimate` | 频响函数估计（H1 / H2 / Hv 三个估计器）| 系统辨识基础 |
+| `coherence` | 相干函数 | 系统线性度判断 |
+| `cross_spectrum` | 互谱 | 信号对分析 |
+| `auto_spectrum` | 自谱 | 信号自相关分析 |
+| `envelope_spectrum` | 包络谱 | **PdM 突破**，轴承故障检测 |
+| `spectral_kurtosis` | 谱峭度 | 故障频段识别 |
+| `cepstrum` | 倒谱 | 传动系统 / 语音分析 |
+| `iso10816_judge` | ISO 10816 振动等级判定 | 工业振动标准合规 |
+
+### Should Have（视进度补）
+
+| 节点 | 说明 | 状态 |
+|---|---|---|
+| `modulation_spectrum` | 调制谱 | 已有研究材料，产品化成本低 |
+| `fluctuation_strength` | 心声波动强度 | 同上 |
+| `wavelet_transform` | 小波变换 | 同上 |
+
+### 2026 H2 不做（Won't Have）
+
+明确告知客户**短期不做**的：
+
+| 类别 | 节点 | 不做原因 |
+|---|---|---|
+| **EMA / 模态分析** | `ema_modal` 等系列 | 重型功能，2027 Q1 评估 |
+| **TPA / 传递路径分析** | `tpa_analysis` 等 | 同上 |
+| **建筑声学** | `rt60` / `sti` 等 | 不是核心客户群 |
+| **Beamforming / 声学相机** | 相关节点 | 需要硬件配合，不做纯软件 |
+
+### 2027 主线 1 — Tinia Production 配套节点
+
+> 在线产线版的新节点形态（流处理 + 集成）。
+
+| 节点 | 说明 |
+|---|---|
+| `realtime_stream_input` | 实时传感器流输入（MQTT / OPC UA / Modbus 等）|
+| `online_window` | 在线滑动窗口处理 |
+| `threshold_alert` | 阈值告警节点（超限触发通知）|
+| `email_notify` / `sms_notify` / `webhook_call` | 告警推送节点 |
+| `mes_writer` | 写入 MES / ERP 系统 |
+| `database_writer` | 通用数据库写入（PostgreSQL / TimescaleDB 等）|
+| `dashboard_realtime` | 实时仪表盘输出 |
+| `model_inference` | 模型推理节点（PyTorch / ONNX 等）|
+| `model_ota_pull` | 从云端拉取最新模型 |
+
+### 2027 主线 3 — 商店外部贡献节点（设想）
+
+商店开放后，预期来自高校 / 独立开发者的节点类型：
+
+| 类别 | 例子 | 来源 |
+|---|---|---|
+| **行业垂类** | 风电特有指标 / 工业泵特有指标 / 高铁特有指标 | 高校 + 行业研究院 |
+| **先进算法** | 论文里的新心声指标 / 新故障检测方法 | 学术发布 |
+| **标准方法** | GB / ISO / SAE 等标准节点（按编号） | 检测中心 / 独立顾问 |
+| **特定硬件接入** | 某品牌传感器 / 数采卡 SDK 节点 | 硬件厂商 / 集成商 |
+
+商店生态形成后，节点数量会按月递增。
+
+### 路线节点总览（按时间线）
+
+```
+2026 H1（已完成）：33 节点基础
+   ↓
+2026 H2 W1-W2：第一波 5 节点 + 基础设施增强
+   ↓
+2026 H2 W3-W4：第二波 9 节点（Order Tracking 战役）
+   ↓
+2026 H2 W5-W6：第三波 8 节点（System + PdM 抢跑）
+   ↓
+2026 Q4：累计 55+ 节点
+   ↓
+2027 H1：Tinia Production 配套 ~10 节点
+   ↓
+2027 H2：商店开放，外部贡献节点持续涌入
+   ↓
+2027 Q4 目标：商店上节点数量持续增长
+```
+
+详细 H2 三波交付时间表见 [`08-roadmap.md`](./08-roadmap.md)。
 
 ---
 
