@@ -19,7 +19,7 @@ user-invocable: true
 
 按这个顺序看：
 
-1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 一句话定位 / 三层产品矩阵 / 核心差异化
+1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 一句话定位 / 5 个 SKU 产品矩阵 / 核心差异化
 2. **[reference/06-competitive-landscape.md](./reference/06-competitive-landscape.md)** — 跟 HEAD ArtemiS / Siemens Testlab 等传统 NVH 工具的对比
 3. **[reference/05-target-customers.md](./reference/05-target-customers.md)** — 客户画像（NVH 工程师 / 研究院 / Tier1 / 风电…）+ 他们的痛点
 4. **[reference/07-pricing-business-model.md](./reference/07-pricing-business-model.md)** — 三层定价模型、商业模式
@@ -42,7 +42,7 @@ user-invocable: true
 按这个顺序看：
 
 1. **[reference/01-product-overview.md](./reference/01-product-overview.md)**
-2. **[reference/03-edition-comparison.md](./reference/03-edition-comparison.md)** — Community / Pro / Production 三层差异
+2. **[reference/03-edition-comparison.md](./reference/03-edition-comparison.md)** — Community / Pro / Server / SaaS / Production 五档差异
 3. **[reference/06-competitive-landscape.md](./reference/06-competitive-landscape.md)** — 与传统工具对比
 4. **[reference/08-roadmap.md](./reference/08-roadmap.md)** — 2026 H2 三波交付 + 2027 三主线
 5. **[faq/01-customer-questions.md](./faq/01-customer-questions.md)** — 客户最常问（数据安全 / 迁移 / 定价等）
@@ -59,9 +59,9 @@ user-invocable: true
 
 | 文件 | 内容摘要 |
 |---|---|
-| [01-product-overview.md](./reference/01-product-overview.md) | 一句话定位 / 三层产品矩阵 / 核心差异化三条 |
+| [01-product-overview.md](./reference/01-product-overview.md) | 一句话定位 / 5 个 SKU 产品矩阵 / 核心差异化三条 |
 | [02-architecture.md](./reference/02-architecture.md) | 7 件套架构 + 仓库关系图 + 数据流 |
-| [03-edition-comparison.md](./reference/03-edition-comparison.md) | Community / Pro / Production 功能与目标用户差异 |
+| [03-edition-comparison.md](./reference/03-edition-comparison.md) | Community / Pro / Server / SaaS / Production 功能与目标用户差异 |
 | [04-key-concepts.md](./reference/04-key-concepts.md) | 节点 / 流程 / 类型系统 / blob / DAG / 看板 / namespace |
 | [05-target-customers.md](./reference/05-target-customers.md) | 客户画像 + 行业切片 + 痛点对照 |
 | [06-competitive-landscape.md](./reference/06-competitive-landscape.md) | HEAD ArtemiS / Siemens Testlab / Brüel & Kjær 对比 |

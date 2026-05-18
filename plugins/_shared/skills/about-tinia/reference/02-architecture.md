@@ -219,7 +219,7 @@
 | 主平台 vs plugins | AI 客户端的 plugin 在 AI 那侧，不嵌主平台 |
 | 主平台 vs store | 让商店能独立部署、独立运维、按平台级服务演进 |
 
-HEAD ArtemiS / Siemens Testlab 是 30 年的 C++ 单机软件，所有功能耦合在一个进程里 —— 想加 AI agent 接口、想做节点商店、想做云端协同，**架构上做不了**。Tinia 的 7 件套切分让这些都是顺理成章的扩展。
+HEAD ArtemiS / Siemens Testlab 是基于桌面单机架构的成熟商业软件，功能集成在单进程内 —— 要扩展到 AI agent 接口 / 节点商店 / 云端协同需要重写大量基础设施。Tinia 的 7 件套切分让这些扩展是顺理成章的演进。
 
 ---
 

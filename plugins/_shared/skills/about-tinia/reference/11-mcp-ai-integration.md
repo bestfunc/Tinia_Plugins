@@ -14,14 +14,14 @@
 
 ## 为什么这是护城河
 
-### 传统 NVH 工具做不了
+### 传统 NVH 工具的现状
 
-HEAD ArtemiS / Siemens Testlab 是 30+ 年 C++ 单机软件：
+HEAD ArtemiS / Siemens Testlab 基于桌面单机架构演进多年：
 
-- 进程模型是单机 GUI，没有 HTTP server
-- 内部 SDK 是给"人写脚本"用的，不是给"AI agent 调用"的
-- 要做 MCP 接入需要重写认证 / 事件总线 / 工具调用框架
-- 即使决定做，工程量是 3-5 年
+- 进程模型是单机 GUI，没有内置 HTTP server
+- 内部 SDK 主要面向"人写脚本"，未原生支持 AI agent 协议
+- 加 MCP 接入需要重写认证 / 事件总线 / 工具调用框架
+- 工程量预估 3-5 年
 
 ### Tinia 是为此设计的
 

@@ -195,4 +195,4 @@ Tinia Production 是 SmartQuality 已经走通路径的复用 + Tinia 节点生�
 - 离线场景（Pro 客户）→ `01-nvh-engineer-workflow.md`、`03-tier1-supplier-test.md`
 - 2027 路线图细节 → `../reference/08-roadmap.md`
 - Production 跟 Pro 架构关系 → `../reference/02-architecture.md`
-- 三层产品矩阵 → `../reference/03-edition-comparison.md`
+- 5 个 SKU 产品矩阵 → `../reference/03-edition-comparison.md`

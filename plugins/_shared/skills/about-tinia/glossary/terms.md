@@ -61,7 +61,7 @@ Tinia 内置的音频播放节点 + 前端 widget。能播放上游节点输出�
 
 ### Community（社区版）
 
-Tinia 三层产品中的免费层。面向学生 / 研究者 / 个人工程师，提供基础节点 + 单通道分析 + AI 辅助 + 流程复杂度限制。详见 `reference/03-edition-comparison.md`。
+Tinia 5 个 SKU 中的免费层（桌面单机）。面向学生 / 研究者 / 个人工程师，提供基础节点 + 单通道分析 + AI 辅助 + 流程复杂度限制。详见 `reference/03-edition-comparison.md`。
 
 ### Composite DataSource（组合数据源）
 
@@ -244,11 +244,13 @@ Tinia 的多租户基本单位。一个 Org 包含若干 Member、若干 Seat、
 
 ### Pro（Tinia Pro）
 
-Tinia 三层产品中的中间层。面向 NVH 工程师 / 研究院 / Tier1 测试部门，提供完整离线分析工作站、多通道、报告导出、Order Tracking。2026 H2 主交付。
+Tinia 5 个 SKU 中的**个人付费版**（桌面单机）。面向个人 NVH 工程师 / 独立顾问 / 自由职业，提供完整离线分析工作站、多通道、报告导出、Order Tracking。2026 H2 主交付。
+
+跟 Server 的差异：Pro 是**个人**，Server 是**团队**（详见 `reference/03-edition-comparison.md`）。
 
 ### Production（Tinia Production）
 
-Tinia 三层产品中的最高层。面向工厂在线产线部署，提供实时流处理、多机协同、MES 集成、模型 OTA。2027 规划。
+Tinia 5 个 SKU 中的**在线产线版**（边缘 + 云端）。面向工厂在线产线部署，提供实时流处理、多机协同、MES 集成、模型 OTA。2027 规划。
 
 ### Plugin（插件）
 
@@ -268,15 +270,19 @@ Tinia 三层产品中的最高层。面向工厂在线产线部署，提供实�
 
 ### SaaS
 
-Tinia 的多租户公网部署形态（`tinia-saas.bestfunc.com`）。一个实例托管多个 Org，按 seat 订阅。
+Tinia 5 个 SKU 中的**多组织云端版**（公网托管）。一个实例托管多个 Org，按 seat 订阅。**规划中**，当前未正式商业化。
 
 ### Seat（席位）
 
 激活授权单位。一个 Org 购买若干 Seat，分给 Member 后 Member 才能在自己机器上激活 Tinia 实例。
 
-### Server（私有化版）
+### Server（团队私有化版）
 
-Tinia 的公司内网部署形态。单 Org，单实例，部署在客户自己的服务器上（如 `t.bestfunc.com`）。
+Tinia 5 个 SKU 中的**团队付费版**（公司内网 web 部署）。面向公司 NVH 部门 / Tier1 测试团队 / 检测中心 / 合资 OEM / 国企。单 Org 多用户，多人协作，含团队管理 + 流程模板库 + 凭据共享 + 报告模板组织级 + 审计日志 + 实施服务。
+
+跟 Pro 的差异：Pro 是**个人桌面**，Server 是**团队 web + 私有化部署**。功能内核一样，差异在协作能力。详见 `reference/03-edition-comparison.md`。
+
+部署形态：客户内网服务器，外部 PostgreSQL + MinIO；可 docker-compose 单机 / K8s 部署 / 空气隔离环境。
 
 ### Setup Wizard（设置向导）
 
