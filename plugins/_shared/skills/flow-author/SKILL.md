@@ -62,6 +62,67 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 > 当前账号下没有可用数据源。要先去"数据源"模块创建一个，
 > 还是先让我用流程里其它节点（如 dataset_random）做合成数据测试？
 
+## 动态端口节点（重要 — 不学这节会做错）
+
+某些节点支持**任意数量的输入端口**，看 `nodes_describe` 返回的 `dynamic_inputs` 字段确定：
+
+```json
+"dynamic_inputs": {
+  "enabled": true,
+  "prefix": "in",
+  "min_ports": 2,
+  "max_ports": 8
+}
+```
+
+**规则**：
+
+1. **不需要"加端口"操作** —— 端口按命名规则**按需自动激活**
+2. 端口名规则：`<prefix>_1`, `<prefix>_2`, ... `<prefix>_N`（N 不超过 max_ports）
+3. **连到 `in_3` 时自动激活第 3 个端口**，不需要先 set_params 或别的操作
+4. **AI 一定要按用户给的数据源数量连足所有 in_N**：用户 4 个数据集合并 → 连 `in_1`/`in_2`/`in_3`/`in_4` 四条边
+5. **不要跳号**：直接连 in_4 跳过 in_3 会让端口出现"空槽位"，前端看着乱
+
+### 常见动态端口节点速查
+
+| 节点 | prefix | 范围 | 用途 |
+|---|---|---|---|
+| `bestfunc/dataset_merge` | `in` | 2-8 | 合并多个数据集（按 item_id）|
+| `bestfunc/dashboard_node` | `in` | 1-16 | 看板节点，接多个 viewer 的 dashboard_view 输出 |
+| `bestfunc/indicator_merge` | `in` | 2-8 | 合并多个指标节点输出 |
+| `bestfunc/feature_merge` | `in` | 2-8 | 合并多个特征节点输出 |
+| `bestfunc/annotation_merge` | `in` | 2-8 | 合并多个段落标注 |
+
+### 典型场景：4 个数据集合并
+
+```js
+{flow_id, ops: [
+  // 4 个 dataset_node
+  {op: "add_node", class_type: "bestfunc/dataset_node", alias: "ds1", params: {datasource_id: 11}},
+  {op: "add_node", class_type: "bestfunc/dataset_node", alias: "ds2", params: {datasource_id: 12}},
+  {op: "add_node", class_type: "bestfunc/dataset_node", alias: "ds3", params: {datasource_id: 13}},
+  {op: "add_node", class_type: "bestfunc/dataset_node", alias: "ds4", params: {datasource_id: 14}},
+  // merge 节点（只需加 1 个，不用"加端口"）
+  {op: "add_node", class_type: "bestfunc/dataset_merge", alias: "mrg"},
+  // 4 条连边，分别到 in_1 / in_2 / in_3 / in_4 —— 关键：N 个数据集就连 N 条
+  {op: "connect", src: "ds1", src_port: "out", dst: "mrg", dst_port: "in_1"},
+  {op: "connect", src: "ds2", src_port: "out", dst: "mrg", dst_port: "in_2"},
+  {op: "connect", src: "ds3", src_port: "out", dst: "mrg", dst_port: "in_3"},
+  {op: "connect", src: "ds4", src_port: "out", dst: "mrg", dst_port: "in_4"},
+]}
+```
+
+### 典型场景：dashboard 看板接多个 viewer
+
+```js
+// 3 个分析节点 → 各自有 dashboard_view 输出
+// 1 个 dashboard_node 接所有 viewer
+{op: "add_node", class_type: "bestfunc/dashboard_node", alias: "dash"},
+{op: "connect", src: "spectrum_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_1"},
+{op: "connect", src: "indicator_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_2"},
+{op: "connect", src: "cluster_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_3"},
+```
+
 ## 端口连接报错怎么解读
 
 `flow_connect` 失败时常见原因：
@@ -69,8 +130,9 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 | 错误信息 | 原因 | 解决 |
 |---|---|---|
 | `源节点 X 没有输出端口 Y` | 端口名拼错 | 调 `nodes_describe` 看正确端口 key |
-| `目标节点 X 没有输入端口 Y` | 端口名拼错 / 该端口是动态的 | 同上；动态端口看 `dynamic_inputs.prefix` |
+| `目标节点 X 没有输入端口 Y` | 端口名拼错 / 没用动态端口命名规则 | 看 `nodes_describe` 的 `dynamic_inputs.prefix`，用 `<prefix>_N` 形式（如 `in_3`）|
 | `类型不兼容：A.x (KindA) → B.y (KindB)` | 端口类型不匹配 | 调 `nodes_list_types` 看类型体系，可能要在中间加转换节点 |
+| `超出 dynamic_inputs.max_ports` | 连的 N 超过 max | 减少输入数或选其他支持更多端口的节点 |
 
 ## "测试新插件"的典型流程模板
 
