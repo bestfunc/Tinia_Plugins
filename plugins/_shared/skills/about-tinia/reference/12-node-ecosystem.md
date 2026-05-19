@@ -23,13 +23,22 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 > Tinia 官方节点（`bestfunc/*` namespace），共 33+ 个。覆盖核心声学 / 振动算法 + 数据源 + 可视化。
 
-### 数据源 / 输入
+### 数据源 / 数据流（builtin Go 节点）
 
-| 节点 | 说明 |
-|---|---|
-| `dataset_node` | 通用数据集加载（接 datasource）|
-| `signal_generator` | 合成信号（白噪声 / 正弦 / 扫频，多通道）|
-| `materialize_node` | 把 lazy 数据集固化到 blob |
+> ⚠ 这一类是 daemon 内置的 Go 节点（不在 `Tinia_nodes/` 仓库），跟用户开发的 Python 节点统一暴露在 `bestfunc/*` namespace。
+
+| 节点 | 说明 | 动态端口 |
+|---|---|---|
+| `dataset_node` | 通用数据集加载（接 datasource）| ❌ |
+| `signal_generator` | 合成信号（白噪声 / 正弦 / 扫频，多通道）| ❌ |
+| `materialize_node` | 把 lazy 数据集固化到 blob | ❌ |
+| `dataset_merge` | **合并多个数据集** | ✅ 动态 in_N（2-8）|
+| `dashboard_node` | **看板节点**，接多个 viewer 的 dashboard_view 输出 | ✅ 动态 in_N（1-16）|
+| `attach_attributes_node` | 把外部属性表附加到数据集 items | ❌ |
+| `filter_node` | 通用 item 过滤器 | ❌ |
+| `sample_node` | 数据集随机 / 顺序采样 | ❌ |
+| `csv_export` | 把数据集 items 导出 CSV | ❌ |
+| `print_console` | 调试节点，把任意输入打印到 stderr | ❌ |
 
 ### 信号处理 / 数据准备
 
@@ -74,14 +83,25 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 ### 指标计算 / 整理
 
-| 节点 | 说明 |
-|---|---|
-| `level_meter` | 声级表（dBA / dBZ 等）|
-| `indicator_math` | 指标数学运算（加减乘除 / 阈值判断等）|
-| `indicator_merge` | 多源指标合并 |
-| `feature_merge` | 多源特征合并 |
-| `feature_normalize` | 特征归一化（Z-score / Min-Max 等）|
-| `annotation_merge` | 多源段落标注合并 |
+| 节点 | 说明 | 动态端口 |
+|---|---|---|
+| `level_meter` | 声级表（dBA / dBZ 等）| ❌ |
+| `indicator_math` | 指标数学运算（加减乘除 / 阈值判断等）| ❌ |
+| `indicator_merge` | 多源指标合并 | ✅ in_N（2-8）|
+| `feature_merge` | 多源特征合并 | ✅ in_N（2-8）|
+| `feature_normalize` | 特征归一化（Z-score / Min-Max 等）| ❌ |
+| `annotation_merge` | 多源段落标注合并 | ✅ in_N（2-8）|
+
+### 动态端口节点 — 重要常识
+
+部分节点支持**任意数量输入端口**（声明 `dynamic_inputs.prefix="in"` + 范围）。AI 用 MCP 调流程时**连到 `in_N` 就自动激活第 N 个端口**，不需要"加端口"操作。
+
+5 个常见动态端口节点：
+- `dataset_merge`（数据集合并）
+- `dashboard_node`（看板）
+- `indicator_merge` / `feature_merge` / `annotation_merge`
+
+更多详见 `flow-author` skill 的"动态端口节点"专章。
 
 ### 可视化
 
