@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Tinia 声学数据分析平台的 Claude Code plugin 市场。提供 SaaS / 公司私有化 / 桌面单机 / 本地开发 四种部署的 plugin 变体，按你的实际场景安装对应那一个即可。",
-    "version": "1.2.24"
+    "version": "1.2.25"
   },
   "plugins": [
     {

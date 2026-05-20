@@ -13998,6 +13998,14 @@ async function saveConfig(cfg) {
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
   await writeFile(CONFIG_PATH, JSON.stringify(cfg, null, 2), { mode: 384 });
 }
+function isLoopbackEndpoint(endpoint) {
+  try {
+    const u = new URL(endpoint);
+    return u.hostname === "localhost" || u.hostname === "127.0.0.1" || u.hostname === "::1";
+  } catch {
+    return false;
+  }
+}
 function tokenValid(cfg, requiredScopes = []) {
   if (!cfg.access_token || !cfg.expires_at) return false;
   if (cfg.expires_at <= Date.now() + 6e4) return false;
@@ -14188,6 +14196,10 @@ async function exchangeCode(meta, clientId, code, redirectUri, verifier) {
   return await res.json();
 }
 async function ensureToken(cfg) {
+  if (isLoopbackEndpoint(cfg.endpoint)) {
+    log(`endpoint=${cfg.endpoint} \u662F loopback\uFF0C\u8DF3\u8FC7 OAuth\uFF08\u8D70 daemon loopback trust\uFF09`);
+    return cfg;
+  }
   if (tokenValid(cfg, REQUIRED_SCOPES)) return cfg;
   log("\u9700\u8981\u8BA4\u8BC1\uFF0C\u542F\u52A8\u6D4F\u89C8\u5668 loopback \u6D41\u7A0B...");
   const meta = await fetchMetadata(cfg.endpoint);
@@ -14242,9 +14254,13 @@ async function uploadFileToDatasource(cfg, datasourceId, localPath, filenameOpt)
   const form = new FormData();
   form.append("files", new Blob([buf]), filename);
   const url = `${cfg.endpoint}/api/v1/mcp_data/datasources/${datasourceId}/uploads`;
+  const headers = {};
+  if (cfg.access_token) {
+    headers["Authorization"] = `Bearer ${cfg.access_token}`;
+  }
   const res = await fetch(url, {
     method: "POST",
-    headers: { Authorization: `Bearer ${cfg.access_token}` },
+    headers,
     body: form
   });
   if (!res.ok) {
