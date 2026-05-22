@@ -14,6 +14,7 @@ user-invocable: false
 ```yaml
 key: my_node
 name: "我的节点"
+sub_name: "My Node"
 category: transform
 version: "1.0"
 
@@ -48,6 +49,11 @@ runtime:
 ### `name`（string）
 
 前端节点面板显示的名字。随便起，中文 OK。
+
+### `sub_name`（string，可选）
+
+副名（小字），显示在 `name` 旁边。设计用途：节点中文主名 + 英文副名（如 `name: 图表查看器 / sub_name: Chart Viewer`），或者主名 + 风味描述。
+独立于多语言体系 —— 跟 `name` 一起总会显示（用户可在节点库切是否显示副名）。
 
 ### `category`（string，默认 `transform`）
 
@@ -106,11 +112,16 @@ outputs:
 dynamic_inputs:
   enabled: true
   prefix: in              # 端口 key = in_1, in_2, ...
-  label: "指标"            # 端口显示名模板
-  port_type: IndicatorData # 所有动态端口的类型
+  label: "特征源"          # 端口显示名模板
+  port_type: FeatureMatrix # 推荐用 FeatureMatrix（超类型，自动接 IndicatorData）
   min_ports: 2
   max_ports: 10           # 0 = 无限制
 ```
+
+**`port_type` 选 FeatureMatrix 还是 IndicatorData**：
+- 想接"任何特征源" → `FeatureMatrix`（自动兼容单标量指标 + 多列特征矩阵）
+- 强制只收单标量指标 → `IndicatorData`
+- 通用透传节点 → `Any`
 
 ### `params_schema`（string，相对路径）
 
@@ -165,6 +176,25 @@ channels_mode: per_channel   # 默认（行业共识，推荐）
 | `multichannel_aware` | 节点自己处理 (n_ch, n_samples) | channel_split / channel_select 这种通道操作节点 |
 
 不设 = 平台 fallback `per_channel`（向后兼容老节点）。详见 `sdk-reference` 的 AudioInput 章节。
+
+### `automl`（object，可选；声明节点在 AutoML 中的角色）
+
+让节点显式声明能否参与 AutoML 调参/评估。AutoML 配置向导按这些字段过滤节点。
+
+```yaml
+automl:
+  tunable: true        # 节点的 params 可加入搜索空间
+  evaluable: true      # 节点的输出可作 features 拿去训练判别函数
+  labelable: false     # 节点的输出可作 label 来源（带 attributes 的数据源类节点）
+```
+
+| 字段 | 何时为 true |
+|------|-------------|
+| `tunable` | 节点有数值参数想调参（如阈值、窗长、平滑系数） |
+| `evaluable` | 节点输出 `FeatureMatrix`（features 端口）能拿去训分类器 |
+| `labelable` | 数据源节点 / `attach_attributes` / `filter_node` 等能提供"分组维度" |
+
+不设 = 不参与 AutoML（默认）。
 
 ### `ui`（object，可选）
 

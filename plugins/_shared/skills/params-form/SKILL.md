@@ -105,43 +105,45 @@ export default function MyNodeParams({ params, onChange }: Props) {
       </div>
       {/* ... */}
 
-      {/* 帮助弹窗 */}
+      {/* 帮助弹窗（v1.26+ 统一模式：560px 宽，flex-col + 顶部标题栏 + 滚动内容区） */}
       {showHelp && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center"
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50"
              onClick={() => setShowHelp(false)}>
-          <div className="bg-card border border-border rounded-lg p-5 max-w-lg max-h-[80vh] overflow-auto"
+          <div className="bg-card border border-border rounded-lg w-[560px] max-h-[80vh] flex flex-col"
                onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-text-primary">小波变换分析</h3>
+            <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+              <span className="text-sm font-semibold text-text-primary">小波变换分析</span>
               <button onClick={() => setShowHelp(false)} className="text-text-muted hover:text-text-primary">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="space-y-3 text-xs text-text-secondary leading-relaxed">
-              <Section title="用途">
-                对输入音频做离散小波变换（DWT），逐频带统计能量、占比、熵、RMS 等指标。
-              </Section>
-              <Section title="输入">
-                <code>data: AudioData</code> — 任意 AudioData 子类型（Dataset / MaterializedDataset 均可）
-              </Section>
-              <Section title="输出">
-                <code>result: IndicatorData</code> — 每条 indicator 含 item_id / band / level /
-                sample_rate / freq_low_hz / freq_high_hz / name / value / unit
-              </Section>
-              <Section title="核心参数">
-                <ul className="list-disc pl-4 space-y-1">
-                  <li><b>wavelet</b>：通用首选 db4；语音 sym4/sym8；最快 haar</li>
-                  <li><b>level</b>：0=自动；手动建议 4-8</li>
-                  <li><b>channel_mode</b>：mono_mix 默认；多通道独立用 per_channel</li>
-                  <li>...每个参数列一行</li>
-                </ul>
-              </Section>
-              <Section title="典型用法">
-                轴承故障特征提取 → wavelet=db4 + per_channel + use_db=true
-              </Section>
-              <Section title="已知限制">
-                信号短于 min_samples 会被跳过（默认 256）
-              </Section>
+            <div className="flex-1 overflow-auto p-4 text-[11px] text-text-secondary space-y-3">
+              <div>
+                <div className="font-semibold text-text-primary mb-1">功能</div>
+                <p>对输入音频做离散小波变换（DWT），逐频带统计能量、占比、熵、RMS 等指标。</p>
+              </div>
+              <div>
+                <div className="font-semibold text-text-primary mb-1">输入</div>
+                <p><b>data</b>（必选）：AudioData —— 任意 AudioData 子类型（Dataset / MaterializedDataset 均可）</p>
+              </div>
+              <div>
+                <div className="font-semibold text-text-primary mb-1">输出</div>
+                <p><b>result</b>：IndicatorData —— 每条 indicator 含 item_id / band / level / sample_rate / freq_low_hz / freq_high_hz / name / value / unit</p>
+              </div>
+              <div>
+                <div className="font-semibold text-text-primary mb-1">核心参数</div>
+                <p><b>wavelet</b>：通用首选 db4；语音 sym4/sym8；最快 haar</p>
+                <p><b>level</b>：0=自动；手动建议 4-8</p>
+                <p><b>channel_mode</b>：mono_mix 默认；多通道独立用 per_channel</p>
+              </div>
+              <div>
+                <div className="font-semibold text-text-primary mb-1">典型用法</div>
+                <p>轴承故障特征提取 → wavelet=db4 + per_channel + use_db=true</p>
+              </div>
+              <div>
+                <div className="font-semibold text-text-primary mb-1">已知限制</div>
+                <p>信号短于 min_samples 会被跳过（默认 256）；level 太大重建质量下降</p>
+              </div>
             </div>
           </div>
         </div>
@@ -149,16 +151,9 @@ export default function MyNodeParams({ params, onChange }: Props) {
     </div>
   )
 }
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wider text-text-muted mb-1">{title}</div>
-      <div>{children}</div>
-    </div>
-  )
-}
 ```
+
+**参考实现**：`bestfunc/active_segment` / `bestfunc/score_predictor` / `bestfunc/chart_viewer` 的 `ui/ParamsForm.tsx` 都是这个模式，直接抄结构改文案。
 
 ### 弹窗内容必含的 6 个区块
 

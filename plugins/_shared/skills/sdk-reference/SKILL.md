@@ -163,6 +163,64 @@ effective_cal = ch.calibration_db if ch.calibration_db else params.get("calibrat
 
 依赖：声明 `numpy` 和 `scipy` 在 `runtime/requirements.txt`。tinia_audio / tinia_audio_input 走 PYTHONPATH 不用列。
 
+### `tinia_features.FeatureBuilder` —— 产出 FeatureMatrix（v1.13+，分析节点必用）
+
+输出多列特征时用这个收集器，**自动**做以下事：
+- 按 item_id 归并多通道结果到同行（一个 item 不同通道展开成多列）
+- 输出 `columns` 列表（按字典序）
+- 输出 `labels`（英文 key → 中文显示名，给前端 chart_viewer / AutoML 显示用）
+- 输出 `feature_direction`（low/high/both，给异常检测节点用）
+- 自动透传 `_provenance` 字段（数据溯源）
+
+```python
+from tinia_features import FeatureBuilder, stats_from_series, TIME_STATS_LABELS
+
+# 节点顶部常量
+FEATURE_LABELS = {
+    "value": "响度",
+    "value_overall": "总响度",
+    **TIME_STATS_LABELS,  # 提供 vs_time_mean/max/p95 等常见统计量的中文
+}
+
+# run.py 末尾
+fb = FeatureBuilder(
+    labels=FEATURE_LABELS,                     # 必传，否则 chart_viewer 显示英文 key
+    direction={"value": "low", "vs_time_max": "low"},  # 可选，异常检测节点用
+)
+for src_item in items:
+    for ch in AudioInput.iter_channels(rt, src_item):
+        features = {
+            "value": compute_loudness(ch.samples, ch.sr),
+            **stats_from_series(vs_time, prefix="vs_time_"),
+        }
+        fb.add(
+            source_item_id=src_item["item_id"],
+            channel_label=ch.channel_short,     # ⚠️ 必须 channel_short，不能用 ch.label
+            features=features,
+            provenance=Runtime.extract_provenance(src_item),
+            name=src_item.get("name"),
+        )
+h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
+rt.emit_output("features", h)
+```
+
+**铁律 — `channel_label` 必须用 `ch.channel_short`**：
+- `ch.channel_short`：单通道返回 `""`，多通道返回 `"ch0"` / `"ch1"` —— 这才是设计意图
+- `ch.label`：单通道会返回 item_id 本身 —— 错用会让 features 列变成 `<item_id>.<feature>`，每个样本一组独立列，AutoML 训练时矩阵爆炸 + 对角线非零异常
+
+**输出 dict 结构**（`fb.build()`）：
+```python
+{
+    "columns": ["energy", "value", "vs_time_max", ...],
+    "labels": {"energy": "能量", "value": "响度", "vs_time_max": "时序-最大", ...},
+    "feature_direction": {"value": "low", ...},
+    "rows": [
+        {"item_id": "001", "name": "...", "features": {"energy": 0.5, "value": 31.8, ...}, "_provenance": {...}}
+    ],
+    "total": N
+}
+```
+
 ## 进度 & 输出事件
 
 每个方法都会写一行 JSON 到 stdout（runner 监听并 relay 到前端/DB）。

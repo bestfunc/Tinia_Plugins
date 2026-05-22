@@ -107,7 +107,9 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 | 节点 | 说明 |
 |---|---|
-| `indicator_viewer` | 指标表格 / 趋势图 |
+| `indicator_viewer` | 单指标查看器（时序 / 频谱 / 排序表） |
+| `spectrum_viewer` | 频谱查看器（2D 热力图 + 3D 多种模式） |
+| `chart_viewer` | **通用图表查看器**（v1.26+）—— 接行列表格做柱状/散点/折线/箱线/直方 5 种图，左侧可折叠面板、X 轴样式弹出菜单 |
 | `matrix_view` | 矩阵可视化（如混淆矩阵 / 相关性矩阵）|
 
 ### 高级分析 / 异常检测
@@ -116,12 +118,23 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 |---|---|
 | `cluster_explore` | 聚类探索（PCA / UMAP 降维 + 可视化）|
 | `zscore_anomaly` | Z-score 异常检测 |
+| `score_predictor` | **AutoML 评分预测**（v1.26+）—— 接 AutoML 判别函数 JSON，按公式跑每行 score + 预测类别，支持 5 种算法（逻辑回归 / 线性判别 / 二阶多项式 / 决策树 / 梯度提升树）|
 
 ### 仪表盘
 
 | 节点 | 说明 |
 |---|---|
 | `dashboard_view` 输出 | 多 Viewer 组合给 Dashboard 用 |
+
+### AutoML 链路（v1.25+ 主线能力）
+
+| 模块 | 说明 |
+|---|---|
+| 调参引擎 | Optuna 贝叶斯优化驱动，支持搜索空间 / 评估函数声明 / Top-K 结果 |
+| 训练 / 验证拆分 | 真 holdout（不再是 val 子集自跑 CV 蒙到 1.0），gap > 15% ⚠️ 过拟合警告 |
+| 区分度诊断 | PCA 散点 + 混淆矩阵 + per-class 指标 + 特征 × 样本热力图 + 错分明细 |
+| 判别函数蒸馏 | best trial 拟合 5 种简单算法（LR/LDA/Poly2/Tree/GBDT）→ 公式 / 权重柱 / 决策树图 |
+| 一键创建评分节点 | 蒸馏完直接 fork 原流程 + 加 score_predictor + 接 chart_viewer，部署只需连一根线 |
 
 ### 节点开发节奏
 
