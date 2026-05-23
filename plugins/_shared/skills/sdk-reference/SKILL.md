@@ -111,6 +111,71 @@ handle = rt.upload_blob(json.dumps(out).encode(), "application/json")
 rt.emit_output("result", handle)
 ```
 
+⚠ **小数据 ≤ 1 万 item 才用这个**。大数据集（10 万+ items）必须用下面的 `emit_streaming`，
+否则 `json.dumps(...).encode()` 单次序列化会让内存翻倍 OOM。
+
+### `rt.emit_streaming(port, header, node_type, schema=None)` —— **大数据集必用**（v1.28+）
+
+JSONL 格式 emit：首行写 header，每行写一个 item，自动管理临时文件 + 上传。
+避免 `results.append(...) + json.dumps(...)` 累积模式的内存翻倍。
+
+```python
+# 推荐用法：open() + try/finally
+out = rt.emit_streaming("result", header={
+    "indicator": "octave_A",
+    "unit": "dB",
+    "fraction": 3,
+}, node_type="Any").open()
+try:
+    for item in items:
+        ...
+        out.write_item({
+            "item_id": ch.label,
+            "value": value,
+            "vs_freq": {"freqs": valid_centers, "values": [...]},
+        })
+finally:
+    out.close()    # 正常完成 → 上传；异常时也清理临时文件
+
+# 等价 context manager 写法（节点 indent 会多一层，多数情况推荐上面那种）
+with rt.emit_streaming("result", header={...}, node_type="Any") as out:
+    for item in items:
+        out.write_item({...})
+```
+
+**header 规范**：放所有 items 共享的元数据（indicator / unit / fraction / etc），
+不在 per-item 里重复。`total` 字段由 SDK 自动回填，不用自己写。
+
+**schema 参数**：可选，注入到 handle.schema 给前端 viewer 用（如 `{"item_count": 100}`）。
+
+### `rt.read_dataset(handle) -> (header, items_iter)` —— **新节点首选**（v1.28+）
+
+自动检测 jsonl / 老 json 双格式，返回 (header dict, items iterator)。
+**消费 LS3 改造后的声学节点输出必须用这个**（老 `json.loads(fetch_blob)` 解析 jsonl 会失败）。
+
+```python
+# 节点输入：data 端口
+input_handle = rt.task["inputs"]["data"]
+header, items_iter = rt.read_dataset(input_handle)
+
+# header 拿共享元数据（如 unit / indicator / freqs）
+shared_unit = header.get("unit")
+total = int(header.get("total") or 0)
+
+# items_iter 是 generator，惰性解析
+for item in items_iter:
+    process(item)
+
+# 老代码兼容（业务逻辑需要 list 时）
+items = list(items_iter)
+ds = {**header, "items": items}      # 跟老 json.loads 结果同结构
+```
+
+### `rt.read_streaming(handle) -> (header, items_iter)` —— 显式 jsonl
+
+跟 `read_dataset` 类似但**不做格式探测**（默认假设 handle 是 jsonl）。
+推荐用 `read_dataset`（兼容性更好）。
+
 ### `rt.fetch_content_url(url: str) -> bytes`
 
 直接从 URL 下载（不走 blob store hash 校验）。**只有 item 里真有 `content_url` 字段时才用** ——
@@ -200,8 +265,12 @@ for src_item in items:
             provenance=Runtime.extract_provenance(src_item),
             name=src_item.get("name"),
         )
-h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
-rt.emit_output("features", h)
+# ⚠ 大数据集（10 万+ items）必用 build_streaming（v1.28+），避免 json.dumps(fb.build()) 内存翻倍
+fb.build_streaming(rt, "features", node_type="FeatureMatrix")
+
+# 老 API（小数据集 / 兼容场景仍可用）
+# h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
+# rt.emit_output("features", h)
 ```
 
 **铁律 — `channel_label` 必须用 `ch.channel_short`**：

@@ -278,7 +278,7 @@ channels_mode: per_channel    # 默认行为，多通道源自动按通道展开
 
 ### 5. 写 run.py
 
-骨架是：
+#### 5.1 小数据集骨架（≤ 1 万 items）
 
 ```python
 import json
@@ -305,6 +305,54 @@ handle = rt.upload_blob(json.dumps(result).encode(), "application/json")
 rt.emit_output("result", handle)
 rt.emit_done()
 ```
+
+#### 5.2 大数据集骨架（10 万+ items，分析类节点强烈推荐 v1.28+）
+
+```python
+import json
+from tinia_runtime import Runtime
+from tinia_audio_input import AudioInput
+from tinia_features import FeatureBuilder
+
+rt = Runtime.from_stdin()
+params = rt.task.get("params", {})
+
+# 输入：流式读，兼容 jsonl + 老 json
+in_header, items_iter = rt.read_dataset(rt.task["inputs"]["data"])
+total = int(in_header.get("total") or 0)
+
+fb = FeatureBuilder(labels={"value": "结果"})
+
+# 输出：流式 emit，避免 json.dumps 内存翻倍
+out = rt.emit_streaming("result", header={
+    "indicator": "my_node",
+    "unit": "dB",
+    # 共享 metadata 放 header，不在 per-item 重复
+}, node_type="Any").open()
+try:
+    for idx, item in enumerate(items_iter):
+        for ch in AudioInput.iter_channels(rt, item):
+            value = compute_something(ch.samples, ch.sr)
+            out.write_item({
+                "item_id": ch.label,
+                "value": value,
+            })
+            fb.add(
+                source_item_id=str(item.get("item_id", idx)),
+                channel_label=ch.channel_short,
+                features={"value": value},
+            )
+        if total > 0:
+            rt.emit_progress((idx + 1) / total, f"{idx + 1}/{total}")
+finally:
+    out.close()
+
+fb.build_streaming(rt, "features", node_type="FeatureMatrix")
+rt.emit_done()
+```
+
+**判断标准**：节点 emit 的 items 可能 > 1 万 → 必用 5.2 骨架。
+分析类节点（输入 Dataset，输出 IndicatorData + FeatureMatrix）默认走 5.2。
 
 **改 TODO 区域** —— 根据用户描述的业务逻辑写。
 
