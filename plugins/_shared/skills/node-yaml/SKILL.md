@@ -185,7 +185,7 @@ emits_quantity: velocity               # 节点输出的物理量;不声明 = �
 ```
 
 - **accepts_quantities**：算法仅对特定物理量有意义时声明（如心理声学节点只对声压有定义）。编辑器会沿连线上溯数据源，通道物理量不在集合内 → 节点黄色 ⚠ 警告（**告知不阻断** — 连线和运行照常）。合法值：sound_pressure / acceleration / velocity / displacement / voltage / current / force / strain / temperature / rpm。
-- **emits_quantity**：改变量纲且**方向固定**的节点声明（如固定"加速度→速度"）。方向是运行参数的节点（如积分/微分方向可选）不用静态声明 — 在 runtime 里改写输出 `metadata.channels` 的 quantity/unit（参考官方 vibration_convert 的做法）。
+- **emits_quantity**：改变量纲且**方向固定**的节点声明（如固定"加速度→速度"）。方向是运行参数的节点（如积分/微分方向可选）不用静态声明 — 在 runtime 里改写输出 `metadata.channels` 的 quantity/unit（参考官方 signal_math(信号数学运算)的做法）。
 
 ### `automl`（object，可选；声明节点在 AutoML 中的角色）
 
