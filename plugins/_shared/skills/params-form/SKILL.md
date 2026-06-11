@@ -267,18 +267,36 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `uplot` | 时序图（声学指标常用） |
 | `@/lib/utils` | `cn`（Tailwind class 合并） |
 | `@/api/client` | `api.get` / `api.post` 等调 Tinia 主 API |
+| `@/lib/three-bundle` | three.js 聚合（THREE + OrbitControls + EffectComposer + Bloom，3D 视图用） |
+| `@/components/ui/Select` | **下拉选择（shadcn 风格,表单首选）**：`Select / SelectTrigger / SelectValue / SelectContent / SelectItem / SelectGroup` |
+| `@/components/ui/SearchSelect` | 带搜索的下拉：`SearchSelect / SearchMultiSelect`（选项多时用,多选版带全选/反选） |
+
+**下拉用法**（与标准 shadcn 一致）：
+
+```tsx
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/Select'
+
+<Select value={v} onValueChange={(nv) => set('mode', nv)}>
+  <SelectTrigger><SelectValue /></SelectTrigger>
+  <SelectContent>
+    <SelectItem value="a">选项 A</SelectItem>
+    <SelectItem value="b">选项 B</SelectItem>
+  </SelectContent>
+</Select>
+```
 
 任何 Tailwind class 都可用（主应用已扫描所有 dev 项目的 ui/ 目录）。
 
 **项目内相对 import**：允许 `./` `../`，但解析后必须仍在当前 dev 项目目录内（不能 `../../别的项目`）。
 
-**不能 import**：
+**不能 import**（设计统一约束：节点 UI 不允许自带组件库/外部包，统一用上表注入的实例）：
 - `axios` / `dayjs` / `lodash` 等任何主应用没打包的第三方包 → 用 `fetch` / 原生 Date / 自己写
-- `@/components/*`（主应用业务组件）→ 高耦合，主应用一改插件就崩，自己用原生 `<select>` `<input>` 配 Tailwind
+- `@radix-ui/*` / 任何 UI 组件库 → 用上表的 `@/components/ui/Select` 等注入组件
+- 上表之外的 `@/components/*`（主应用业务组件）→ 高耦合，主应用一改插件就崩；普通输入用原生 `<input>` 配 Tailwind
 - `@/stores/*`（主应用全局状态）→ 容易污染，要拿数据用 `@/api/client`
 - 任何 node 模块（`fs` / `child_process` 等）→ 浏览器代码本来也用不到
 
-要扩白名单：联系平台维护者（编辑 `server/internal/dev/build_sandbox.go` + `client/src/lib/devComponentLoader.ts`，两处必须对称改）。
+要扩白名单：联系平台维护者（编辑 `server/internal/dev/build_sandbox.go` + `client/src/lib/devComponentLoader.ts`，两处必须对称改，并同步更新本清单 — 三处是同一份契约）。
 
 ---
 
