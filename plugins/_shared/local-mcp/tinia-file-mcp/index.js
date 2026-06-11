@@ -14048,6 +14048,16 @@ async function fetchMetadata(endpoint) {
   if (!res.ok) throw new Error(`OAuth metadata \u83B7\u53D6\u5931\u8D25: ${res.status}`);
   return await res.json();
 }
+async function fetchEdition(endpoint) {
+  try {
+    const res = await fetch(`${endpoint}/api/v1/meta`, { signal: AbortSignal.timeout(3e3) });
+    if (!res.ok) return "";
+    const body = await res.json();
+    return body.data?.edition || "";
+  } catch {
+    return "";
+  }
+}
 async function registerClient(meta, redirectUri) {
   const res = await fetch(meta.registration_endpoint, {
     method: "POST",
@@ -14197,8 +14207,12 @@ async function exchangeCode(meta, clientId, code, redirectUri, verifier) {
 }
 async function ensureToken(cfg) {
   if (isLoopbackEndpoint(cfg.endpoint)) {
-    log(`endpoint=${cfg.endpoint} \u662F loopback\uFF0C\u8DF3\u8FC7 OAuth\uFF08\u8D70 daemon loopback trust\uFF09`);
-    return cfg;
+    const edition = await fetchEdition(cfg.endpoint);
+    if (edition === "desktop") {
+      log(`endpoint=${cfg.endpoint} \u662F\u684C\u9762\u5355\u673A\u7248\uFF0C\u8DF3\u8FC7 OAuth\uFF08\u8D70 daemon loopback trust\uFF09`);
+      return cfg;
+    }
+    log(`endpoint=${cfg.endpoint} \u662F loopback \u4F46 edition=${edition || "\u672A\u77E5"}\uFF0C\u8D70\u6807\u51C6 OAuth`);
   }
   if (tokenValid(cfg, REQUIRED_SCOPES)) return cfg;
   log("\u9700\u8981\u8BA4\u8BC1\uFF0C\u542F\u52A8\u6D4F\u89C8\u5668 loopback \u6D41\u7A0B...");
@@ -14326,7 +14340,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       if (!local_path || typeof local_path !== "string") {
         throw new McpError(ErrorCode.InvalidParams, "local_path \u5FC5\u586B\uFF08string\uFF0C\u7EDD\u5BF9\u8DEF\u5F84\uFF09");
       }
-      const result = await uploadFileToDatasource(cfg, datasource_id, local_path, filename);
+      let result;
+      try {
+        result = await uploadFileToDatasource(cfg, datasource_id, local_path, filename);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("HTTP 401")) {
+          log("\u6536\u5230 401,\u6E05\u9664\u672C\u5730 token \u91CD\u65B0\u6388\u6743\u540E\u91CD\u8BD5");
+          cfg = await ensureToken({ ...cfg, access_token: void 0, expires_at: void 0 });
+          result = await uploadFileToDatasource(cfg, datasource_id, local_path, filename);
+        } else {
+          throw e;
+        }
+      }
       return {
         content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
       };

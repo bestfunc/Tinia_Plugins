@@ -278,55 +278,102 @@ channels_mode: per_channel    # 默认行为，多通道源自动按通道展开
 
 ### 5. 写 run.py
 
-骨架是：
+**现代骨架**（V2 流式 + 多通道；老 `Runtime` API 不要再用）：
 
 ```python
+"""节点入口 — Tinia 现代 SDK（V2 流式 + 多通道）。
+
+⚠ 改本文件必须 bump node.yaml.version，否则同图同 params 重跑会命中缓存。
+"""
 import json
-from tinia_runtime import Runtime
+import numpy as np
+from tinia_runtime import ChunkRuntime
+from tinia_audio_input import AudioInput
+from tinia_features import FeatureBuilder
 
-rt = Runtime.from_stdin()
-rt.emit_progress(0, "开始处理...")
 
-data = rt.fetch_blob(rt.task["inputs"]["data"])
-items = json.loads(data)
-params = rt.task.get("params", {})
+FEATURE_LABELS = {"value": "主指标"}
 
-rt.emit_progress(50, "处理中...")
 
-# TODO: 在这里实现节点逻辑
-result = {
-    "type": "IndicatorData",
-    "indicators": [
-        {"name": "result", "value": 42, "unit": "dB"}
-    ]
-}
+def main():
+    rt = ChunkRuntime.from_stdin()
+    p = rt.task.get("params") or {}
+    threshold = float(p.get("threshold", 0.0) or 0.0)
+    mode = p.get("mode", "default") or "default"
 
-handle = rt.upload_blob(json.dumps(result).encode(), "application/json")
-rt.emit_output("result", handle)
-rt.emit_done()
+    out = rt.open_output(
+        "result",
+        header={"indicator": "your_indicator", "unit": "dB", "mode": mode},
+        node_type="IndicatorData",
+        inherit_total_from="data",
+    )
+    fb = FeatureBuilder(direction={"value": "high"}, labels=FEATURE_LABELS)
+
+    idx = 0
+    for items_chunk in rt.iter_input("data"):
+        for item in items_chunk:
+            item_id = item.get("item_id", item.get("id", str(idx)))
+            try:
+                # 多通道展开：N 通道音频→N 个独立分析 item
+                for ch in AudioInput.iter_channels(rt, item):
+                    samples = ch.samples
+                    sr = ch.sr
+
+                    # TODO: 实现核心算法
+                    value = float(np.sqrt(np.mean(samples ** 2)))
+
+                    item_res = {
+                        "item_id": ch.label,
+                        "name": ch.display_name,
+                        "value": round(value, 4),
+                        "_meta": ch.to_meta_dict(),
+                    }
+                    rt.carry_provenance(item, item_res)
+                    out.write_item(item_res)
+
+                    fb.add(
+                        source_item_id=str(item_id),
+                        channel_label=ch.channel_short,
+                        features={"value": value},
+                        provenance=rt.extract_provenance(item),
+                        name=item.get("name"),
+                    )
+            except Exception as e:
+                rt.emit_log("warn", f"{item_id}: {e}")
+            idx += 1
+            t = rt.upstream_total("data")
+            rt.emit_progress(min(idx / t, 1.0) if t else 0,
+                             f"{idx}/{t} 项" if t else f"已处理 {idx} 项")
+
+    out.close()
+    h_feat = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
+    rt.emit_output("features", h_feat)
+    rt.emit_done()
+
+
+if __name__ == "__main__":
+    main()
 ```
 
-**改 TODO 区域** —— 根据用户描述的业务逻辑写。
+**改 TODO 区域** —— 根据用户描述的业务逻辑写。关键 API：
 
-**常见模式**（音频分析）：
+| API | 用途 |
+|---|---|
+| `ChunkRuntime.from_stdin()` | 拿 task 上下文（不用旧的 `Runtime`） |
+| `rt.iter_input(port)` | 流式迭代上游 items |
+| `AudioInput.iter_channels(rt, item)` | 多通道音频自动展开（声学节点标配） |
+| `rt.open_output(port, header=..., node_type=..., inherit_total_from=...)` | 创建流式输出端口 |
+| `out.write_item(item_res)` | 推一个 item 到下游 |
+| `FeatureBuilder` | 攒 AutoML 特征矩阵（最后 `fb.build()` 上传到 features 端口） |
+| `rt.carry_provenance(item, item_res)` | 把上游 item 的 provenance（链路追踪）带到下游 |
+| `rt.emit_progress(p, msg)` | 进度上报 0~1 |
+| `rt.emit_log("warn", msg)` | stderr 日志，不污染 stdout 事件流 |
 
-```python
-# 遍历 items 下载音频
-for i, item in enumerate(items["items"]):
-    audio_bytes = rt.fetch_content_url(item["content_url"])
-    # 用 numpy/scipy/librosa 分析
-    ...
-    rt.emit_progress((i + 1) / len(items["items"]))
-```
-
-**加依赖**：如果 import 了新库（numpy / scipy / librosa），改 `runtime/requirements.txt`：
-```
-numpy
-scipy
-librosa
-```
+**加依赖**：业务包加 `runtime/requirements.txt`。SDK（`tinia_runtime`/`tinia_audio_input`/`tinia_features`）**由主仓 binary 嵌入自动 PYTHONPATH 可见，不要在 requirements 里写**。
 
 Tinia reload 时会自动 `pip install -r requirements.txt`。
+
+**⚠ 缓存陷阱**：cache_key 算法 = `sha256(nodeType + nodeVersion + inputs.hash + params.hash)`，**不含 run.py 内容 hash**。改 `runtime/run.py` 行为必须 bump `node.yaml.version`，否则同图同 params 重跑命中缓存 → 不真执行 → 改动静默失效。
 
 ### 6. 写 `ui/ParamsForm.tsx`（必做，不是可选）
 
@@ -361,10 +408,11 @@ dev_reload(project_id)
 ## 约束提醒
 
 - 节点 key 一旦建好，目录名、node.yaml 里的 key、full_key 都绑定。**改 key 不等于改名，等于新建一个节点**。要改名的话请删旧的建新的
-- `run.py` 必须以 `rt = Runtime.from_stdin()` 开头，以 `rt.emit_done()` 结束
-- 每个输出端口 **必须 emit_output 一次**；漏一个会让下游连不到
+- `run.py` 必须以 `rt = ChunkRuntime.from_stdin()` 开头，以 `rt.emit_done()` 结束
+- 每个输出端口 **必须 emit_output 或 open_output + close 一次**；漏一个会让下游连不到
 - 未接的 optional 输入在 run.py 里要判空：`rt.task["inputs"].get("mask")`
 - stdout 只能出 runtime 约定的事件 JSON —— 调试用 `rt.emit_log()` 或 `print(..., file=sys.stderr)`
+- **改 run.py 行为后必须 bump node.yaml.version**，否则同图同 params 重跑命中缓存看不到改动效果
 
 ## 相关 Skill
 
