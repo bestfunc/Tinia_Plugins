@@ -13982,6 +13982,7 @@ var CONFIG_DIR = join(homedir(), ".tinia");
 var CONFIG_PATH = join(CONFIG_DIR, "tinia-file-mcp.json");
 async function loadConfig() {
   const envEndpoint = process.env.TINIA_ENDPOINT?.trim();
+  const envUpload = process.env.TINIA_UPLOAD_ENDPOINT?.trim();
   let stored = {};
   try {
     const raw = await readFile(CONFIG_PATH, "utf-8");
@@ -13989,10 +13990,11 @@ async function loadConfig() {
   } catch {
   }
   const endpoint = envEndpoint || stored.endpoint || "https://tinia-saas.bestfunc.com";
+  const upload_endpoint = envUpload || void 0;
   if (stored.endpoint && stored.endpoint !== endpoint) {
-    return { endpoint };
+    return { endpoint, upload_endpoint };
   }
-  return { ...stored, endpoint };
+  return { ...stored, endpoint, upload_endpoint };
 }
 async function saveConfig(cfg) {
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
@@ -14267,7 +14269,8 @@ async function uploadFileToDatasource(cfg, datasourceId, localPath, filenameOpt)
   log(`upload ${localPath} (${fileStat.size} bytes) \u2192 datasource ${datasourceId}`);
   const form = new FormData();
   form.append("files", new Blob([buf]), filename);
-  const url = `${cfg.endpoint}/api/v1/mcp_data/datasources/${datasourceId}/uploads`;
+  const base = cfg.upload_endpoint || cfg.endpoint;
+  const url = `${base}/api/v1/mcp_data/datasources/${datasourceId}/uploads`;
   const headers = {};
   if (cfg.access_token) {
     headers["Authorization"] = `Bearer ${cfg.access_token}`;
