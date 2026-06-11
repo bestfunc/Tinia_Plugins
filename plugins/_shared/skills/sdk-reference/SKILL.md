@@ -211,9 +211,30 @@ for ch in AudioInput.iter_channels(rt, item):
 ```
 
 **展开行为由节点 yaml 的 `channels_mode` 决定**（详见 node-yaml skill）：
-- `per_channel`（默认）：N 通道 → N 次 iter，输出 N 个独立 item
+- `per_channel`：N 通道 → N 次 iter，输出 N 个独立 item（分析节点推荐）
 - `mix_down`：自动 mean，1 个 item
-- `first_only` / `requires_single` / `multichannel_aware`：见 node-yaml
+- `first_only` / `requires_single`（**不声明时的缺省** — fail-fast）/ `multichannel_aware`：见 node-yaml
+
+**ChannelInput v2 字段**（通道语义 v2 起，物理量锚点）：
+
+| 字段 | 含义 |
+|------|------|
+| `ch.quantity` | 物理量类型（sound_pressure / acceleration / velocity / ...；空 = 未声明）|
+| `ch.db_reference` | dB 计算参考值（按 quantity 自动派生 ISO 1683 标准值；0 = 无标定）|
+| `ch.is_calibrated` | 信号是否具备绝对物理量级（已应用灵敏度/标定，或源文件本身是物理量）|
+| `ch.unit` | 物理单位（"Pa" / "m/s²" / ...）|
+| `ch.bit_depth` | 源文件位深（wav 16/24/32；0 = 未知）|
+
+**输出 dB 的节点统一写法**（viewer 据此诚实标轴 "dB SPL" vs "dB (rel.)"）：
+
+```python
+ref = ch.db_reference or 1.0           # 无标定 → 相对 dB(ref=1)
+level = 20 * np.log10(rms / ref)
+# _meta 用 ch.to_meta_dict() 自动带出 db_reference / calibrated 供 viewer 标轴
+```
+
+**注意 samples 已是物理量**：value_kind=physical 的源（振动 CSV/TDMS 等）SDK 直通不归一化；
+raw_voltage 的源按模板灵敏度换算。节点**不要再自行缩放**。
 
 **关键收益**：
 1. **不用写 mean(axis=1) 样板** —— SDK 收口，节点只关心算法
@@ -289,6 +310,37 @@ fb.build_streaming(rt, "features", node_type="FeatureMatrix")
     "total": N
 }
 ```
+
+## 错误分级（ConfigError + emit_warning）
+
+平台约定（错误分级，主仓 channel-semantics 设计 §11.6）：**配置类错误告知用户但不阻断运行**。
+
+```python
+from tinia_runtime import ConfigError
+
+config_errs = 0
+last_config_err = None
+for item in items:
+    try:
+        for ch in AudioInput.iter_channels(rt, item):
+            ...
+    except ConfigError as e:    # 配置类(缺采样率/通道模式不符) — SDK reader 抛的就是它
+        config_errs += 1
+        last_config_err = e
+        rt.emit_log("warn", f"{item_id}: {e}")
+    except Exception as e:      # 数据类(单文件损坏) — skip 即可
+        rt.emit_log("warn", f"{item_id}: {e}")
+
+# 收尾三件套：
+if idx > 0 and ok_count == 0:
+    raise RuntimeError(f"全部 {idx} 项处理失败,最后错误: {last_err}")   # 0 结果必须失败
+if config_errs > 0:
+    rt.emit_warning(f"{config_errs}/{idx} 项因配置问题被跳过: {last_config_err}")
+```
+
+- `ConfigError(ValueError)`：同一配置下重复 N 个 item 都会失败的错误。自己的节点遇到"参数/配置不对"也应抛它（继承 ValueError，向后兼容）。
+- `rt.emit_warning(message)`：与 emit_log("warn") 的区别 — warning 写进运行记录，run 完成后前端在节点上显示黄色 ⚠ 角标（"完成了但你应该知道"）。可多次调用，server 换行累积。
+- 全部失败仍要 raise — "0 结果假成功"比失败更糟。
 
 ## 进度 & 输出事件
 

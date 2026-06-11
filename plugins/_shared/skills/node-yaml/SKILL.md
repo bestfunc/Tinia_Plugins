@@ -164,7 +164,7 @@ runtime:
 声明节点对**多通道音频输入**的展开策略。SDK `AudioInput.iter_channels()` 据此分发，节点开发者不写多通道路由代码。
 
 ```yaml
-channels_mode: per_channel   # 默认（行业共识，推荐）
+channels_mode: per_channel   # 分析节点推荐
 ```
 
 | 值 | 行为 | 适用 |
@@ -175,7 +175,17 @@ channels_mode: per_channel   # 默认（行业共识，推荐）
 | `requires_single` | 多通道直接报错 | 严格接口（要求上游先 split/select）|
 | `multichannel_aware` | 节点自己处理 (n_ch, n_samples) | channel_split / channel_select 这种通道操作节点 |
 
-不设 = 平台 fallback `per_channel`（向后兼容老节点）。详见 `sdk-reference` 的 AudioInput 章节。
+**不设 = `requires_single`**（通道语义 v2 起 fail-fast：不声明就不允许多通道输入，杜绝静默平均；单通道输入不受影响）。老文档说缺省 per_channel 已废止 — **所有处理多通道的节点必须显式声明**。详见 `sdk-reference` 的 AudioInput 章节。
+
+### `accepts_quantities` / `emits_quantity`（可选；物理量契约）
+
+```yaml
+accepts_quantities: [sound_pressure]   # 节点接受的物理量集合;不声明 = 任意
+emits_quantity: velocity               # 节点输出的物理量;不声明 = 透传输入
+```
+
+- **accepts_quantities**：算法仅对特定物理量有意义时声明（如心理声学节点只对声压有定义）。编辑器会沿连线上溯数据源，通道物理量不在集合内 → 节点黄色 ⚠ 警告（**告知不阻断** — 连线和运行照常）。合法值：sound_pressure / acceleration / velocity / displacement / voltage / current / force / strain / temperature / rpm。
+- **emits_quantity**：改变量纲且**方向固定**的节点声明（如固定"加速度→速度"）。方向是运行参数的节点（如积分/微分方向可选）不用静态声明 — 在 runtime 里改写输出 `metadata.channels` 的 quantity/unit（参考官方 vibration_convert 的做法）。
 
 ### `automl`（object，可选；声明节点在 AutoML 中的角色）
 
