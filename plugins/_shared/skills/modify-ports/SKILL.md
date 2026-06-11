@@ -19,6 +19,7 @@ allowed-tools: mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__
 | **删一个 optional 输入** | ✅ 兼容；已连的线会变灰但不报错 |
 | **删一个 required 输入** | ⚠️ 旧流程能跑但逻辑可能错 |
 | **改输入 type**（放宽，如 AudioData → Any） | ✅ 兼容 |
+| **改输入 type**（**升级到超类型**，如 IndicatorData → FeatureMatrix） | ✅ 兼容 — 详见下面"超类型升级" |
 | **改输入 type**（收窄，如 Any → AudioData） | ❌ 原来连了 Dataset 的会失配 |
 | **加一个输出** | ✅ 兼容 |
 | **删一个输出** | ❌ 下游引用这个输出的会断 |
@@ -28,6 +29,24 @@ allowed-tools: mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__
 | **删一个参数** | ✅ 兼容（run.py 记得处理 None） |
 | **改参数 key** | ❌ 旧流程里填的值丢失 |
 | **改参数 type** | ⚠️ 数值 ↔ 字符串要迁移 |
+
+## 超类型升级（兼容性放大）
+
+Tinia 类型系统有"超类型"机制（详见 `types-reference`）：
+
+| 超类型 | 子类型 |
+|---|---|
+| `AudioData` | `MaterializedDataset` / `ProcessedDataset` / `AudioData` |
+| `FeatureMatrix` | `IndicatorData` / `FeatureMatrix` |
+
+**把输入类型升级到超类型 = 兼容性放大，从不破坏老连线**：
+
+- 比如把 `feature_merge` 的 `dynamic_inputs.port_type` 从 `IndicatorData` 改成 `FeatureMatrix`（v3.0.0 真实改造）：
+  - 老流程接了 IndicatorData 上游 → 仍然兼容（IndicatorData 是 FeatureMatrix 子类型）
+  - 新流程能多接 FeatureMatrix 上游 → 不需要再造一个节点
+  - runtime 内部需要按 data 结构（看是否有 `columns` 字段）自动区分两种格式
+
+**反向不行**：把 FeatureMatrix 收窄成 IndicatorData，连了 FeatureMatrix 上游的会失配。
 
 ## 流程
 

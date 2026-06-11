@@ -34,7 +34,9 @@ nodes_read_source(key, "ui/Viewer.tsx")          # 看官方主视图（布局 /
 | 你的节点输出 type | 推荐先读这个官方节点的 Viewer | 关键技术 |
 |---|---|---|
 | `IndicatorData`（单值/时序指标，如声级、能量频带） | **bestfunc/indicator_viewer** | `uplot`（时序图）+ Tailwind 柱状条（频谱）+ 左右布局 + 多视图切换 |
-| `FeatureMatrix` / 高维特征 | **bestfunc/cluster_explore** | `echarts` 散点图 / 热力图 |
+| `FeatureMatrix`（多列特征矩阵 + labels 字段） | **bestfunc/chart_viewer**（首选，通用） | `echarts` 5 种图（柱状/散点/折线/箱线/直方）+ 左侧可折叠面板 + X 轴样式弹出菜单 + 自动用 labels 显示中文字段名 |
+| `FeatureMatrix` —— 高维降维聚类专用 | **bestfunc/cluster_explore** | `echarts` 散点图 / 热力图 |
+| `items + attributes`（如 score_predictor.scored） | **bestfunc/chart_viewer** | 自适应解析 + 中文字段显示 |
 | `AnomalyResult` | **bestfunc/zscore_anomaly** | Tailwind 表格 + 高亮异常行 + 阈值控件 |
 | `MaterializedDataset` / `AudioData` | **bestfunc/spectrum_viewer** | `AudioPlayer` 组件（在 spectrum_viewer/ui/AudioPlayer.tsx）+ uplot 频谱 |
 | `Table` / 表格类 | **bestfunc/matrix_view** | `<table>` + Tailwind |
@@ -47,10 +49,72 @@ nodes_read_source(key, "ui/Viewer.tsx")          # 看官方主视图（布局 /
 
 | 文件 | 何时用 | Props |
 |---|---|---|
-| `ui/Viewer.tsx` | **节点输出一种视图就够**（柱状图 / 表格 / 文本） | `({ runId, nodeId, outputs })` |
-| `ui/ViewerLoader.tsx` | 节点要**多视图切换**（如指标查看器：列表 / 时序 / 频谱 / 散点 N 选 1）| `({ runId, nodeId, outputs, nodeParams })` —— 自己 lazy load 子 viewer |
+| `ui/Viewer.tsx` | **节点输出一种视图就够**（柱状图 / 表格 / 文本） | `({ runId, nodeId, outputs, nodeParams?, graphId?, onParamsChange? })` |
+| `ui/ViewerLoader.tsx` | 节点要**多视图切换**（如指标查看器：列表 / 时序 / 频谱 / 散点 N 选 1）| 同上 —— 自己 lazy load 子 viewer |
 
 **只写一个**。两个都存在时前端优先 ViewerLoader，Viewer 永远不被加载。简单节点只写 `Viewer.tsx`，前端会自动 fallback。
+
+### Viewer 持久化通道（v1.26+）
+
+Viewer 收到的完整 Props：
+
+```ts
+interface Props {
+  runId: string
+  nodeId: string
+  outputs: any[]               // 输出端口列表（含 preview + URL）
+  nodeParams?: any             // 节点当前 params 快照
+  graphId?: number             // run 关联的 graph 版本 id（持久化用）
+  onParamsChange?: (next: any) => void | Promise<void>  // 写回 params 通道
+}
+```
+
+**何时用 `onParamsChange`**：
+- viewer 顶部 toolbar 让用户现场调"显示选项"（图表类型 / 字段 / 角度等）
+- 调一次 `onParamsChange({...nodeParams, default_xxx: newValue})`，前端自动 PATCH 回 graph 节点 params
+- 下次重开 viewer 用更新后的默认值
+- 建议 **debounce 300ms** 防高频写
+
+**`onParamsChange` 缺失的兜底**：
+- SharedViewer（分享链接）和老 run 入口不传 `onParamsChange` —— viewer 检测到缺失自动退化为本地态（toolbar 仍能调但关掉就丢）
+- 写 viewer 时 **永远要兜底**：`if (!onParamsChange) { /* 不持久化 */ }`
+
+完整示例参考 `bestfunc/chart_viewer` 的 Viewer.tsx。
+
+### 节点参数面板的帮助按钮（统一规范，v1.26+）
+
+所有节点的 `ui/ParamsForm.tsx` 顶部应该有统一的"帮助说明"按钮：
+
+```tsx
+import { HelpCircle, X } from 'lucide-react'
+
+const [showHelp, setShowHelp] = useState(false)
+
+// 顶部
+<button onClick={() => setShowHelp(true)} className="flex items-center gap-1 text-[10px] text-primary hover:opacity-80">
+  <HelpCircle className="w-3.5 h-3.5" /> 节点中文名
+</button>
+
+// 文件末尾模态窗
+{showHelp && (
+  <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50" onClick={() => setShowHelp(false)}>
+    <div className="bg-card border border-border rounded-lg w-[560px] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-border">
+        <span className="text-sm font-semibold text-text-primary">节点中文名</span>
+        <button onClick={() => setShowHelp(false)} className="text-text-muted hover:text-text-primary"><X className="w-4 h-4" /></button>
+      </div>
+      <div className="flex-1 overflow-auto p-4 text-[11px] text-text-secondary space-y-3">
+        <div><div className="font-semibold text-text-primary mb-1">功能</div><p>...</p></div>
+        <div><div className="font-semibold text-text-primary mb-1">参数</div><p>...</p></div>
+        <div><div className="font-semibold text-text-primary mb-1">输入</div><p>...</p></div>
+        <div><div className="font-semibold text-text-primary mb-1">输出</div><p>...</p></div>
+      </div>
+    </div>
+  </div>
+)}
+```
+
+参考实现：`bestfunc/active_segment` / `bestfunc/score_predictor` / `bestfunc/chart_viewer` 的 ParamsForm.tsx。
 
 ---
 

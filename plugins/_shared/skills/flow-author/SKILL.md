@@ -90,7 +90,7 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 | `bestfunc/dataset_merge` | `in` | 2-8 | 合并多个数据集（按 item_id）|
 | `bestfunc/dashboard_node` | `in` | 1-16 | 看板节点，接多个 viewer 的 dashboard_view 输出 |
 | `bestfunc/indicator_merge` | `in` | 2-8 | 合并多个指标节点输出 |
-| `bestfunc/feature_merge` | `in` | 2-8 | 合并多个特征节点输出 |
+| `bestfunc/feature_merge` | `in` | 2-32 | 合并多个特征源（IndicatorData 单值 + FeatureMatrix 多列都能接，v3.0.0+） |
 | `bestfunc/annotation_merge` | `in` | 2-8 | 合并多个段落标注 |
 
 ### 典型场景：4 个数据集合并
@@ -121,6 +121,50 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 {op: "connect", src: "spectrum_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_1"},
 {op: "connect", src: "indicator_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_2"},
 {op: "connect", src: "cluster_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_3"},
+```
+
+### 典型场景：通用表格可视化（chart_viewer）
+
+用户跑了一堆特征分析想看分布/相关性时，最快的方式是接 `bestfunc/chart_viewer`（v1.26+）：
+
+```js
+{flow_id, ops: [
+  // 上游已经是某个 features 输出（FeatureMatrix / IndicatorData / score_predictor.scored 都行）
+  {op: "add_node", class_type: "bestfunc/chart_viewer", alias: "chart",
+    params: {
+      default_chart_type: "scatter",      // bar / scatter / line / box / histogram
+      default_x_field: "loudness",
+      default_y_fields: "score",          // 多个 Y 用逗号："score,energy"
+      default_group_by: "predicted",      // 可选，按类别着色
+      title: "评分散点图",
+    }},
+  {op: "connect", src: "src_features", src_port: "features", dst: "chart", dst_port: "data"},
+]}
+```
+
+**chart_viewer 自适应解析三种输入结构**：FeatureMatrix（columns + rows）、IndicatorData（items + value）、score_predictor 风格（items + attributes）。
+
+### 典型场景：AutoML 评分预测部署
+
+用户在 AutoML 调参完看判别函数时点"→ 创建评分节点"——系统会自动 fork 流程 + 加好 `bestfunc/score_predictor` + 接 `bestfunc/chart_viewer`，**正常情况你不需要手搭这条链路**。但要手搭的话：
+
+```js
+{flow_id, ops: [
+  // 上游已经是 features 输出（FeatureMatrix，含训练时同样的字段集）
+  {op: "add_node", class_type: "bestfunc/score_predictor", alias: "scorer",
+    params: {
+      discriminant_json: { algorithm: "lr", weights: {...}, bias: ..., threshold: ..., classes: [...], class_names: [...] },
+      threshold_override: 0,
+      score_field: "score",
+      predicted_class_field: "predicted",
+    }},
+  {op: "connect", src: "src_features", src_port: "features", dst: "scorer", dst_port: "features"},
+
+  // 接图表查看器看分数分布
+  {op: "add_node", class_type: "bestfunc/chart_viewer", alias: "chart",
+    params: { default_chart_type: "box", default_x_field: "predicted", default_y_fields: "score", default_group_by: "predicted" }},
+  {op: "connect", src: "scorer", src_port: "scored", dst: "chart", dst_port: "data"},
+]}
 ```
 
 ## 端口连接报错怎么解读

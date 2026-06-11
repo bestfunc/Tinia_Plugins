@@ -14,6 +14,7 @@ user-invocable: false
 ```yaml
 key: my_node
 name: "我的节点"
+sub_name: "My Node"
 category: transform
 version: "1.0"
 
@@ -48,6 +49,11 @@ runtime:
 ### `name`（string）
 
 前端节点面板显示的名字。随便起，中文 OK。
+
+### `sub_name`（string，可选）
+
+副名（小字），显示在 `name` 旁边。设计用途：节点中文主名 + 英文副名（如 `name: 图表查看器 / sub_name: Chart Viewer`），或者主名 + 风味描述。
+独立于多语言体系 —— 跟 `name` 一起总会显示（用户可在节点库切是否显示副名）。
 
 ### `category`（string，默认 `transform`）
 
@@ -106,11 +112,16 @@ outputs:
 dynamic_inputs:
   enabled: true
   prefix: in              # 端口 key = in_1, in_2, ...
-  label: "指标"            # 端口显示名模板
-  port_type: IndicatorData # 所有动态端口的类型
+  label: "特征源"          # 端口显示名模板
+  port_type: FeatureMatrix # 推荐用 FeatureMatrix（超类型，自动接 IndicatorData）
   min_ports: 2
   max_ports: 10           # 0 = 无限制
 ```
+
+**`port_type` 选 FeatureMatrix 还是 IndicatorData**：
+- 想接"任何特征源" → `FeatureMatrix`（自动兼容单标量指标 + 多列特征矩阵）
+- 强制只收单标量指标 → `IndicatorData`
+- 通用透传节点 → `Any`
 
 ### `params_schema`（string，相对路径）
 
@@ -153,7 +164,7 @@ runtime:
 声明节点对**多通道音频输入**的展开策略。SDK `AudioInput.iter_channels()` 据此分发，节点开发者不写多通道路由代码。
 
 ```yaml
-channels_mode: per_channel   # 默认（行业共识，推荐）
+channels_mode: per_channel   # 分析节点推荐
 ```
 
 | 值 | 行为 | 适用 |
@@ -164,7 +175,36 @@ channels_mode: per_channel   # 默认（行业共识，推荐）
 | `requires_single` | 多通道直接报错 | 严格接口（要求上游先 split/select）|
 | `multichannel_aware` | 节点自己处理 (n_ch, n_samples) | channel_split / channel_select 这种通道操作节点 |
 
-不设 = 平台 fallback `per_channel`（向后兼容老节点）。详见 `sdk-reference` 的 AudioInput 章节。
+**不设 = `requires_single`**（通道语义 v2 起 fail-fast：不声明就不允许多通道输入，杜绝静默平均；单通道输入不受影响）。老文档说缺省 per_channel 已废止 — **所有处理多通道的节点必须显式声明**。详见 `sdk-reference` 的 AudioInput 章节。
+
+### `accepts_quantities` / `emits_quantity`（可选；物理量契约）
+
+```yaml
+accepts_quantities: [sound_pressure]   # 节点接受的物理量集合;不声明 = 任意
+emits_quantity: velocity               # 节点输出的物理量;不声明 = 透传输入
+```
+
+- **accepts_quantities**：算法仅对特定物理量有意义时声明（如心理声学节点只对声压有定义）。编辑器会沿连线上溯数据源，通道物理量不在集合内 → 节点黄色 ⚠ 警告（**告知不阻断** — 连线和运行照常）。合法值：sound_pressure / acceleration / velocity / displacement / voltage / current / force / strain / temperature / rpm。
+- **emits_quantity**：改变量纲且**方向固定**的节点声明（如固定"加速度→速度"）。方向是运行参数的节点（如积分/微分方向可选）不用静态声明 — 在 runtime 里改写输出 `metadata.channels` 的 quantity/unit（参考官方 signal_math(信号数学运算)的做法）。
+
+### `automl`（object，可选；声明节点在 AutoML 中的角色）
+
+让节点显式声明能否参与 AutoML 调参/评估。AutoML 配置向导按这些字段过滤节点。
+
+```yaml
+automl:
+  tunable: true        # 节点的 params 可加入搜索空间
+  evaluable: true      # 节点的输出可作 features 拿去训练判别函数
+  labelable: false     # 节点的输出可作 label 来源（带 attributes 的数据源类节点）
+```
+
+| 字段 | 何时为 true |
+|------|-------------|
+| `tunable` | 节点有数值参数想调参（如阈值、窗长、平滑系数） |
+| `evaluable` | 节点输出 `FeatureMatrix`（features 端口）能拿去训分类器 |
+| `labelable` | 数据源节点 / `attach_attributes` / `filter_node` 等能提供"分组维度" |
+
+不设 = 不参与 AutoML（默认）。
 
 ### `ui`（object，可选）
 

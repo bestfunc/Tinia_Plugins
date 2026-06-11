@@ -111,6 +111,71 @@ handle = rt.upload_blob(json.dumps(out).encode(), "application/json")
 rt.emit_output("result", handle)
 ```
 
+⚠ **小数据 ≤ 1 万 item 才用这个**。大数据集（10 万+ items）必须用下面的 `emit_streaming`，
+否则 `json.dumps(...).encode()` 单次序列化会让内存翻倍 OOM。
+
+### `rt.emit_streaming(port, header, node_type, schema=None)` —— **大数据集必用**（v1.28+）
+
+JSONL 格式 emit：首行写 header，每行写一个 item，自动管理临时文件 + 上传。
+避免 `results.append(...) + json.dumps(...)` 累积模式的内存翻倍。
+
+```python
+# 推荐用法：open() + try/finally
+out = rt.emit_streaming("result", header={
+    "indicator": "octave_A",
+    "unit": "dB",
+    "fraction": 3,
+}, node_type="Any").open()
+try:
+    for item in items:
+        ...
+        out.write_item({
+            "item_id": ch.label,
+            "value": value,
+            "vs_freq": {"freqs": valid_centers, "values": [...]},
+        })
+finally:
+    out.close()    # 正常完成 → 上传；异常时也清理临时文件
+
+# 等价 context manager 写法（节点 indent 会多一层，多数情况推荐上面那种）
+with rt.emit_streaming("result", header={...}, node_type="Any") as out:
+    for item in items:
+        out.write_item({...})
+```
+
+**header 规范**：放所有 items 共享的元数据（indicator / unit / fraction / etc），
+不在 per-item 里重复。`total` 字段由 SDK 自动回填，不用自己写。
+
+**schema 参数**：可选，注入到 handle.schema 给前端 viewer 用（如 `{"item_count": 100}`）。
+
+### `rt.read_dataset(handle) -> (header, items_iter)` —— **新节点首选**（v1.28+）
+
+自动检测 jsonl / 老 json 双格式，返回 (header dict, items iterator)。
+**消费 LS3 改造后的声学节点输出必须用这个**（老 `json.loads(fetch_blob)` 解析 jsonl 会失败）。
+
+```python
+# 节点输入：data 端口
+input_handle = rt.task["inputs"]["data"]
+header, items_iter = rt.read_dataset(input_handle)
+
+# header 拿共享元数据（如 unit / indicator / freqs）
+shared_unit = header.get("unit")
+total = int(header.get("total") or 0)
+
+# items_iter 是 generator，惰性解析
+for item in items_iter:
+    process(item)
+
+# 老代码兼容（业务逻辑需要 list 时）
+items = list(items_iter)
+ds = {**header, "items": items}      # 跟老 json.loads 结果同结构
+```
+
+### `rt.read_streaming(handle) -> (header, items_iter)` —— 显式 jsonl
+
+跟 `read_dataset` 类似但**不做格式探测**（默认假设 handle 是 jsonl）。
+推荐用 `read_dataset`（兼容性更好）。
+
 ### `rt.fetch_content_url(url: str) -> bytes`
 
 直接从 URL 下载（不走 blob store hash 校验）。**只有 item 里真有 `content_url` 字段时才用** ——
@@ -146,9 +211,30 @@ for ch in AudioInput.iter_channels(rt, item):
 ```
 
 **展开行为由节点 yaml 的 `channels_mode` 决定**（详见 node-yaml skill）：
-- `per_channel`（默认）：N 通道 → N 次 iter，输出 N 个独立 item
+- `per_channel`：N 通道 → N 次 iter，输出 N 个独立 item（分析节点推荐）
 - `mix_down`：自动 mean，1 个 item
-- `first_only` / `requires_single` / `multichannel_aware`：见 node-yaml
+- `first_only` / `requires_single`（**不声明时的缺省** — fail-fast）/ `multichannel_aware`：见 node-yaml
+
+**ChannelInput v2 字段**（通道语义 v2 起，物理量锚点）：
+
+| 字段 | 含义 |
+|------|------|
+| `ch.quantity` | 物理量类型（sound_pressure / acceleration / velocity / ...；空 = 未声明）|
+| `ch.db_reference` | dB 计算参考值（按 quantity 自动派生 ISO 1683 标准值；0 = 无标定）|
+| `ch.is_calibrated` | 信号是否具备绝对物理量级（已应用灵敏度/标定，或源文件本身是物理量）|
+| `ch.unit` | 物理单位（"Pa" / "m/s²" / ...）|
+| `ch.bit_depth` | 源文件位深（wav 16/24/32；0 = 未知）|
+
+**输出 dB 的节点统一写法**（viewer 据此诚实标轴 "dB SPL" vs "dB (rel.)"）：
+
+```python
+ref = ch.db_reference or 1.0           # 无标定 → 相对 dB(ref=1)
+level = 20 * np.log10(rms / ref)
+# _meta 用 ch.to_meta_dict() 自动带出 db_reference / calibrated 供 viewer 标轴
+```
+
+**注意 samples 已是物理量**：value_kind=physical 的源（振动 CSV/TDMS 等）SDK 直通不归一化；
+raw_voltage 的源按模板灵敏度换算。节点**不要再自行缩放**。
 
 **关键收益**：
 1. **不用写 mean(axis=1) 样板** —— SDK 收口，节点只关心算法
@@ -162,6 +248,99 @@ effective_cal = ch.calibration_db if ch.calibration_db else params.get("calibrat
 ```
 
 依赖：声明 `numpy` 和 `scipy` 在 `runtime/requirements.txt`。tinia_audio / tinia_audio_input 走 PYTHONPATH 不用列。
+
+### `tinia_features.FeatureBuilder` —— 产出 FeatureMatrix（v1.13+，分析节点必用）
+
+输出多列特征时用这个收集器，**自动**做以下事：
+- 按 item_id 归并多通道结果到同行（一个 item 不同通道展开成多列）
+- 输出 `columns` 列表（按字典序）
+- 输出 `labels`（英文 key → 中文显示名，给前端 chart_viewer / AutoML 显示用）
+- 输出 `feature_direction`（low/high/both，给异常检测节点用）
+- 自动透传 `_provenance` 字段（数据溯源）
+
+```python
+from tinia_features import FeatureBuilder, stats_from_series, TIME_STATS_LABELS
+
+# 节点顶部常量
+FEATURE_LABELS = {
+    "value": "响度",
+    "value_overall": "总响度",
+    **TIME_STATS_LABELS,  # 提供 vs_time_mean/max/p95 等常见统计量的中文
+}
+
+# run.py 末尾
+fb = FeatureBuilder(
+    labels=FEATURE_LABELS,                     # 必传，否则 chart_viewer 显示英文 key
+    direction={"value": "low", "vs_time_max": "low"},  # 可选，异常检测节点用
+)
+for src_item in items:
+    for ch in AudioInput.iter_channels(rt, src_item):
+        features = {
+            "value": compute_loudness(ch.samples, ch.sr),
+            **stats_from_series(vs_time, prefix="vs_time_"),
+        }
+        fb.add(
+            source_item_id=src_item["item_id"],
+            channel_label=ch.channel_short,     # ⚠️ 必须 channel_short，不能用 ch.label
+            features=features,
+            provenance=Runtime.extract_provenance(src_item),
+            name=src_item.get("name"),
+        )
+# ⚠ 大数据集（10 万+ items）必用 build_streaming（v1.28+），避免 json.dumps(fb.build()) 内存翻倍
+fb.build_streaming(rt, "features", node_type="FeatureMatrix")
+
+# 老 API（小数据集 / 兼容场景仍可用）
+# h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
+# rt.emit_output("features", h)
+```
+
+**铁律 — `channel_label` 必须用 `ch.channel_short`**：
+- `ch.channel_short`：单通道返回 `""`，多通道返回 `"ch0"` / `"ch1"` —— 这才是设计意图
+- `ch.label`：单通道会返回 item_id 本身 —— 错用会让 features 列变成 `<item_id>.<feature>`，每个样本一组独立列，AutoML 训练时矩阵爆炸 + 对角线非零异常
+
+**输出 dict 结构**（`fb.build()`）：
+```python
+{
+    "columns": ["energy", "value", "vs_time_max", ...],
+    "labels": {"energy": "能量", "value": "响度", "vs_time_max": "时序-最大", ...},
+    "feature_direction": {"value": "low", ...},
+    "rows": [
+        {"item_id": "001", "name": "...", "features": {"energy": 0.5, "value": 31.8, ...}, "_provenance": {...}}
+    ],
+    "total": N
+}
+```
+
+## 错误分级（ConfigError + emit_warning）
+
+平台约定（错误分级，主仓 channel-semantics 设计 §11.6）：**配置类错误告知用户但不阻断运行**。
+
+```python
+from tinia_runtime import ConfigError
+
+config_errs = 0
+last_config_err = None
+for item in items:
+    try:
+        for ch in AudioInput.iter_channels(rt, item):
+            ...
+    except ConfigError as e:    # 配置类(缺采样率/通道模式不符) — SDK reader 抛的就是它
+        config_errs += 1
+        last_config_err = e
+        rt.emit_log("warn", f"{item_id}: {e}")
+    except Exception as e:      # 数据类(单文件损坏) — skip 即可
+        rt.emit_log("warn", f"{item_id}: {e}")
+
+# 收尾三件套：
+if idx > 0 and ok_count == 0:
+    raise RuntimeError(f"全部 {idx} 项处理失败,最后错误: {last_err}")   # 0 结果必须失败
+if config_errs > 0:
+    rt.emit_warning(f"{config_errs}/{idx} 项因配置问题被跳过: {last_config_err}")
+```
+
+- `ConfigError(ValueError)`：同一配置下重复 N 个 item 都会失败的错误。自己的节点遇到"参数/配置不对"也应抛它（继承 ValueError，向后兼容）。
+- `rt.emit_warning(message)`：与 emit_log("warn") 的区别 — warning 写进运行记录，run 完成后前端在节点上显示黄色 ⚠ 角标（"完成了但你应该知道"）。可多次调用，server 换行累积。
+- 全部失败仍要 raise — "0 结果假成功"比失败更糟。
 
 ## 进度 & 输出事件
 
