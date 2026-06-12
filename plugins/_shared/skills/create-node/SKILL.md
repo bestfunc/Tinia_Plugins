@@ -394,6 +394,39 @@ Tinia reload 时会自动 `pip install -r requirements.txt`。
 
 写完用 `dev_write_file` 落到 `nodes/<key>/ui/ParamsForm.tsx`。
 
+### 6.5 SDK 说明 tab（节点会被 SDK 调用时建议写）
+
+`ui/Help.tsx` 除了默认导出（使用说明），可**额外具名导出 `SDKHelp`** —— 节点帮助
+模态会多出一个「SDK 说明」tab，专写"怎么用 tinia-sdk 调本节点"。脚手架生成的
+`ui/Help.tsx` 已带一个 `SDKHelp` 示例,照着改即可；不需要就删掉这个导出，tab 不出现。
+
+为什么重要：SDK 用户传数据时，单输入节点端口名约定是 `data`（直接
+`run_preset(preset, "x.wav")`）；但**多输入节点 / 端口名不是 data 的节点**，用户
+不知道该传什么端口、各喂什么 —— 必须靠这个 tab 交代清楚。
+
+```tsx
+import { CodeBlock, SdkSection } from '../../shared/SdkDoc'
+
+export function SDKHelp() {
+  return (
+    <div className="space-y-4">
+      <SdkSection title="调用">
+        <CodeBlock code={`import tinia_sdk
+tinia = tinia_sdk.connect()
+r = tinia.run_preset("TNP1:...", inputs={"audio": "test.wav"})  # 写清真实端口名
+print(r.json("result"))`} />
+      </SdkSection>
+      <SdkSection title="注意事项">
+        <ul className="list-disc ml-4"><li>列出每个输入端口喂什么 / 标定 / 量纲要求</li></ul>
+      </SdkSection>
+    </div>
+  )
+}
+```
+
+`CodeBlock` 自带「复制」按钮（来自 `../../shared/SdkDoc`），示例代码统一用它。
+标杆参考 `level_meter`（单输入）和 `audio_segment_split`（端口名 audio，必须显式 inputs）。
+
 ### 7. 测试
 
 ```
