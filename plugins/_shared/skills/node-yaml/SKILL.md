@@ -57,7 +57,20 @@ runtime:
 
 ### `category`（string，默认 `transform`）
 
-影响前端节点面板分组。常用：`source` / `transform` / `analyzer` / `sink` / `viewer`。
+影响前端节点面板分组。实际在用的取值（按官方节点库出现频次）：
+
+| 值 | 含义 | 典型节点 |
+|----|------|----------|
+| `source` | 数据源 / 输入 | 数据源类节点 |
+| `preprocess` | 预处理 | 有效段检测 / 音频分割 / 收敛剔除 |
+| `transform` | 信号变换 | 通道操作 / 信号数学运算 |
+| `analysis` | 分析（最常用） | 声级计 / 响度 / fft |
+| `feature` | 特征提取 | 调制谱 / 各类特征矩阵节点 |
+| `viewer` | 查看器 | 频谱查看器 / 指标查看器 |
+
+示例：`category: analysis`。
+
+> 不要再用 `analyzer` / `sink` —— 这两个值已废弃，官方节点库里没有任何节点在用，写了也只会落到默认分组。
 
 ### `version`（string，默认 `0.0.0`）
 

@@ -47,6 +47,10 @@ DAG 的最小执行单元。一个具体的"做某件事的能力"：
 - `order_tracking` —— 阶次跟踪
 - `signal_generator` —— 生成测试信号
 
+> 两类节点要分清：
+> - **主仓内置节点（Go 实现）**：`dataset_node` / `dataset_merge` / `materialize_node` / `dashboard_node` / `csv_export` / `filter_node` 等，编译在 server 二进制里（`server/internal/nodes/builtin/`），不在 Tinia_nodes 仓。内置 Go 节点同样注册在 `bestfunc` 命名空间（如 `bestfunc/dataset_node`），"内置"指实现方式（Go vs Python），不代表换了命名空间。
+> - **Tinia_nodes Python 节点**：`level_meter` / `fft_spectrum` / `channel_split` / `channel_select` 等分析/处理/可视化节点（约 41 个，namespace `bestfunc`），以 subprocess 形式运行。
+
 ### 节点的组成
 
 ```
@@ -57,10 +61,13 @@ nodes/level_meter/
 │   ├── requirements.txt ← Python 依赖（numpy / scipy 等）
 │   └── .venv/          ← 自动创建的虚拟环境
 └── ui/
-    ├── ParamsForm.tsx  ← 前端参数配置面板
+    ├── ParamsForm.tsx  ← 前端参数配置面板（≥4 参数或含方法选择必须自定义 + 预设）
     ├── Viewer.tsx      ← 前端结果可视化
-    └── ViewerLoader.tsx ← Viewer 的懒加载入口
+    ├── ViewerLoader.tsx ← Viewer 的懒加载入口
+    └── Help.tsx        ← 节点说明 + 参数表 + 算法 + 更新履历（含「SDK 说明」标签页）
 ```
+
+> Python SDK（`tinia_runtime` 等）不再随节点仓分发，已统一到主仓 `server/sdk/python/`，由 server 通过 go:embed 嵌入并在 fork 节点时注入 `PYTHONPATH`，节点本身不携带物理 SDK 目录（消除跨仓库版本漂移）。
 
 ### 节点的命名空间
 
@@ -229,7 +236,8 @@ Handle {
 
 - **桌面单机**：`<data_dir>/blobs/<前缀2>/<hash>.bin`
 - **SaaS / Server**：MinIO（S3 兼容对象存储）
-- **未来 Production**：可配置（AWS S3、阿里云 OSS、Azure Blob、本地 NFS）
+
+blob 存储走统一抽象层，未来可扩展更多后端（如其他对象存储 / NFS），这部分属路线图设想。
 
 ### blob 引用计数
 
@@ -249,14 +257,17 @@ Handle {
 - `indicator_viewer`：指标表格
 - 自定义节点可自带专属 Viewer（用 React + uPlot / ECharts 等画图库）
 
-### Dashboard（多 Viewer 组合）
+### Dashboard（看板：多组件组合的可分享驾驶舱）
 
-把多个 Viewer 组在一张布局里：
+把多个视图 + 富媒体组件组在一张可布局、可分享的报告里。从早期"组合视图的报告"已成长为整屏排版的驾驶舱：
 
-- 拖拽布局（react-grid-layout）
-- 文本块 / 图片 / 切片器（slicer）
-- 多 Viewer 共存
-- 数据源是上游节点的 `dashboard_view` 输出
+- **布局**：流式拖拽布局 + 自由布局；整屏排版（把所有组件缩到一屏直接拖动重排、自由缩放）
+- **组件类型**：视图组件、章节标题、文本（富文本 + 插图 + 全屏编辑）、Item 列表、维度筛选器（slicer）、单图/多图切换、HTML 组件（嵌入上传的 HTML 文件）、视频组件（看板内播放 + 全屏 + 拖动进度）
+- **批量编辑**：Ctrl/⌘ 多选同类组件统一改属性 / 删除 / 调尺寸；视图组件可把一份显示配置一键套用到所有选中
+- **配置层 / 数据层分离**：数据冻结为快照，布局跟随作者最新编辑
+- **分享**：分享链接固化内容快照，不随运行记录清理而失效，长期可访问
+- **性能**：大数据看板先显示框架再按需加载，首屏更快
+- 由主仓内置的 `dashboard_node` 驱动，消费上游 viewer 的看板协议输出
 
 ### Slicer（切片器）
 
@@ -289,9 +300,9 @@ Handle {
 | **模式 B：CSV 导入** | 表格指定配对关系，复杂场景 |
 | **模式 C：手工配对** | UI 拖拽指定，灵活但慢 |
 
-### 通道命名模板
+### 通道模板（Channel Template）
 
-为 Composite DataSource 提供"按模板自动命名通道"能力。例如模板 `mic_<seat>_<direction>` 自动把 wav 文件解析成 `mic_left_front` 等通道名。
+为多通道数据源提供"按模板自动命名 + 物理量语义"能力。例如模板 `mic_<seat>_<direction>` 自动把 wav 文件解析成 `mic_left_front` 等通道名。已升级为物理量语义：每通道带名 / 单位 / 校准 dB + 物理量类型（声压 / 加速度 / 速度等 11 种）+ 传感器灵敏度自动换算，整链路传递；通道校准自动套用。独立「通道模板」页支持 CSV 通道模板（列映射 / 时间序列开关）。
 
 ---
 
@@ -321,19 +332,35 @@ Handle {
 
 ---
 
-## 8. Edition（部署形态）
+## 8. Edition（部署形态）vs SKU（商业形态）
 
-Tinia daemon 启动时的标志：
+这是两个不同维度，容易混淆：
+
+**部署 Edition（代码层，只有 3 个）** —— Tinia daemon 启动时确定，由 `TINIA_EDITION` 环境变量或编译期 ldflags（`config.DefaultEdition`）决定，兜底为 `server`：
 
 | Edition | 用于 | 默认值差异 |
 |---|---|---|
-| `desktop` | 桌面单机版 | 内嵌 PostgreSQL + Python，setup wizard 引导 |
-| `server` | 公司内网私有化 | 外部 PostgreSQL，无 setup wizard |
-| `saas` | 多组织公网 | 多 Org 支持，组织管理 UI |
+| `desktop` | 桌面单机版（`--desktop` 启动） | 内嵌 PostgreSQL + Python，setup wizard 引导，默认端口 18720 |
+| `server` | 公司内网私有化（无参数启动） | 外部 PostgreSQL + MinIO，默认端口 18721 |
+| `saas` | 多组织公网（`TINIA_EDITION=saas`） | 多 Org 支持，组织管理 UI，组织间数据隔离 |
+
+> 代码里只有这三个 edition 常量（`EditionDesktop` / `EditionServer` / `EditionSaas`）。**没有 `production` / `community` / `pro` 这样的 edition flag。**
+
+**商业 SKU（打包/授权层，五档）** —— 面向客户的产品形态，与 edition 不是一一对应：
+
+| SKU | 底层 edition | 状态 |
+|---|---|---|
+| Community（免费桌面） | desktop（未激活/受限） | 已交付 |
+| Pro（个人付费桌面） | desktop（已激活） | 已交付 |
+| Server（团队私有化） | server | 已交付 |
+| SaaS（多租户云） | saas | 已交付 |
+| Production（产线版） | — | 路线图（规划中） |
+
+Community 与 Pro 在代码里同属 desktop edition，区别在「桌面是否激活」（激活校验中间件 `EnforceDesktopActivation`），不是不同 edition flag。
 
 前端通过 `/api/v1/meta` 拿到 edition，按 edition 分叉 UI。
 
-详见 `10-deployment-modes.md`。
+详见 `10-deployment-modes.md`、`03-edition-comparison.md`。
 
 ---
 
@@ -369,9 +396,11 @@ Tinia daemon 启动时的标志：
 
 ### 是什么
 
-Tinia 直接内置 MCP server（`/api/v1/mcp`），让 AI 客户端（Claude Code / Codex / Qwen CLI）能调用 65+ 工具完成全流程开发。
+Tinia 直接内置 MCP server（`/api/v1/mcp`），让 AI 客户端（Claude Code / Codex / Qwen CLI）能调用 70+ 工具（覆盖 8 个模块）完成"开发节点 → 搭流程 → 跑测试 → 改代码"全流程闭环。
 
 不是"加了一个 AI 助手按钮"，是"AI 是 first-class 客户"，跟人类用户平级。
+
+> MCP 接入与 SDK 通路（见下）是两条并行通路：MCP 面向"AI 自动驾驶平台"，SDK 面向"外部程序调用平台算力"。
 
 详见 `11-mcp-ai-integration.md`。
 
@@ -393,7 +422,50 @@ Tinia 直接内置 MCP server（`/api/v1/mcp`），让 AI 客户端（Claude Cod
 
 ---
 
-## 12. AI Activity / Lock / Follow
+## 12. Python SDK 通路 / 流式会话 / 调用分析
+
+### SDK 通路（外部程序调用平台算力）
+
+让外部 Python 程序用 `tinia_sdk` 调用平台上已调好的分析 —— 传数据拿结果，**算法仍在平台 server 进程内执行（没有第二个引擎）**。
+
+- 超管「SDK 管理」输入名称即生成可下载的 SDK 包，凭据（`license.json`，含 `license_id` + `secret`）和服务器地址已内置，零配置。
+- 鉴权走 license（不是 api_key）：请求头 `Bearer <license_id>.<secret>`，server 端查 `sdk_licenses` 表校验。
+- 三种调用方式：① 直接传节点类型 + 参数；② 用节点表单「复制参数」拿到的参数串（自带节点类型）；③ 引用平台流程里调好的节点（平台改参自动生效）。整条流程也能整体调用（放「API 输入」+「API 输出」节点）。
+- 传数据便利：直接传文件路径（wav/csv/npz/tdms）或内存数组自动上传；单输入节点连端口名都不用写。同机调用自动走本地直连（Unix domain socket）+ 路径直传，大文件显著更快。
+- 节点帮助新增「SDK 说明」标签页，官方 40 个节点已全部补齐示例代码。
+
+### 流式会话 / 实时数据流
+
+SDK 新增流式会话，可持续往流程推数据、实时取回计算结果，适合在线 / 边采边算场景。实时直调跳过缓存、走内存中转，响应更快（server 侧 `internal/sdkapi/stream.go`，JWT session_token + push/recv/close/keepalive）。
+
+节点侧的配套是「跨窗状态延续」：声级计 / FFT 频谱 / 倍频程等基础分析节点的滤波器状态、STFT 残留、滚动统计跨窗无缝延续（节点声明 `_stream_continuous`），从"逐窗独立批处理"升级为"无缝实时逐帧"。节点作者只需维护跨窗状态，不用自己管会话生命周期。
+
+### SDK 调用分析
+
+超管可查看每个 SDK 的调用量、成功率、耗时、Top 节点、最近失败，用于排查与监控。
+
+---
+
+## 13. 常驻执行池（Resident Execution Pool / HotPool）
+
+### 是什么
+
+分析节点的 Python 进程可常驻待命（`tinia_runtime.serve()`），只加载一次库。SDK 高频 / 实时调用直接复用热进程，省掉每次 fork 进程 + import 库的固定开销（约 530ms → 纯计算时间）。
+
+- 按 node fullKey 分桶（per-node venv 隔离），第二次起复用。
+- 超管「常驻执行」页：查看运行状态、调进程上限 / 空闲回收、勾选需预热（预热白名单）的节点。
+
+server 侧实现：`server/internal/nodes/hotpool.go`。
+
+---
+
+## 14. 节点输出缓存
+
+按"输入指纹"自动缓存节点输出。命中时跳过执行、显示节省时间，支持单节点缓存开关；标记系统数据集结果也可缓存，「不可缓存」图标仅在手动关掉缓存时显示。配合流式执行引擎，缓存键时序问题已修复。
+
+---
+
+## 15. AI Activity / Lock / Follow
 
 ### Activity Stream
 
@@ -413,7 +485,7 @@ AI 切到某个页面 / 文件时，UI 自动滚到那里，让用户跟得上 A
 
 ## 下一步
 
-- 7 件套架构怎么支持这些概念 → `02-architecture.md`
+- 多仓库架构怎么支持这些概念 → `02-architecture.md`（注：`tinia-engine` / `tinia_runtime` 作为独立仓的设想已归档，执行只在 server 内、节点 SDK 已并入主仓）
 - 节点开发的具体步骤 → 用 `quickstart` / `create-node` skill
 - MCP 工具列表 → `Tinia/docs/mcp-tool-reference.md`
 - 部署形态差异 → `10-deployment-modes.md`

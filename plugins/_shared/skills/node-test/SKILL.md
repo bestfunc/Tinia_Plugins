@@ -138,7 +138,7 @@ signal_generator (sine, 1000 Hz) → <hp_filter> → level_meter   预期：≈ 
 
 ### 模板 5：心理声学节点
 
-→ Read `references/psychoacoustic-standards.md`。**关键**：必须设校准 —— v1.11+ 推荐**直接在 sg 上配 `channel_calibration_db="94"`**（校准跟数据走，所有下游分析节点自动用），分析节点 calibration_db params 留空。老方法（节点 params 配 calibration_db）仍可用，但不如 sg 配方便。
+→ Read `references/psychoacoustic-standards.md`。**关键**：必须设校准 —— 推荐**直接在 sg 上配 `channel_calibration_db="94"`**（校准跟数据走，所有下游分析节点自动用），分析节点 calibration_db params 留空。老方法（节点 params 配 calibration_db）仍可用，但不如 sg 配方便。
 
 ### 模板 6：段落 / 异常检测
 
@@ -179,9 +179,9 @@ indicator_math (原始 - 平滑) → 1k 处应有显著正峰，其他频段 ≈
 
 ### 模板 8：多通道节点（channel_split / channel_select）
 
-✅ **v1.11+ 新行为**：所有分析节点 manifest 默认 `channels_mode: per_channel` —— 多通道源自动按通道展开成 N 个独立 item，**不需要先 split**。下游 indicator_viewer 自动多曲线 + 通道命名。
+✅ **现行规则（通道语义 v2，fail-fast）**：节点 manifest **不声明 `channels_mode` = `requires_single`** —— 多通道输入直接报错，不静默平均。多通道自动按通道展开成 N 个独立 item，是因为分析节点（fft_spectrum / loudness / level_meter / sharpness / tonality / tnr / octave_analysis / order_tracking / modulation_spectrum / roughness / time_stats 等）**显式声明了 `channels_mode: per_channel`**，不是默认行为。滤波器类（weighting_filter / iir_filter / fir_filter）声明 `multichannel_aware`（n 进 n 出，节点自己处理 (n_ch, n_samples)）。详见 node-yaml skill 的 `channels_mode` 表。
 
-老 `load_audio` 路径仍 mix down 单声道（向后兼容老节点；新节点用 SDK `AudioInput`）。详见 sdk-reference / node-yaml skill 的 `channels_mode`。
+显式声明 `per_channel` 的分析节点，多通道源能直接接、自动按通道展开成 N 个 item，下游 indicator_viewer 自动多曲线 + 通道命名。
 
 ```
 # 直接接：sg(channels=2) → fft → 2 条独立频谱
@@ -199,7 +199,7 @@ signal_generator (sine 1k, channels=2)
   ← 输出 2 个 item，每通道独立 sone 值
 ```
 
-#### v1.11+ ChannelMeta 穿透（推荐写测试用）
+#### ChannelMeta 穿透（推荐写测试用）
 
 sg 加了 `channel_names / channel_units / channel_calibration_db` 参数，让通道元信息从源头流到所有分析节点。下游的 _meta.channel_label 和 calibration_db 会用这些值，**不再是默认 ch0/0**。
 
@@ -227,7 +227,7 @@ signal_generator (sine 1k, channels=5,
 
 #### channel_split / channel_select 何时仍有用
 
-虽然 per_channel 已经覆盖大部分场景，这两个节点在以下情况仍有用：
+虽然声明了 `per_channel` 的分析节点已经覆盖大部分场景，这两个节点在以下情况仍有用：
 
 ```
 # channel_split：通道分到不同分支独立处理（不同 channel 走不同链路）
@@ -319,7 +319,7 @@ flow_node_output_preview  ← 跟"上次已知好"的输出对比
 系统阶跃响应             → step (step_at_s=0.5)（真 unit step，看上升时间/过冲/振铃）
 段落检测                 → silence + burst + silence 拼接
 基线对照                 → silence（确认下游对零信号不报错 / 不出虚假峰）
-多通道按通道独立分析     → channels=N + channel_split → N 路并行（必须 split，否则 mean down）
+多通道按通道独立分析     → channels=N 直接接 per_channel 分析节点（自动展开 N item）；要分支不同链路才用 channel_split
 取一个通道分析           → channel_select (channels=L 或 0)，输出仍 AudioData
 ```
 
@@ -394,7 +394,7 @@ flow_id: `xxx`，可在 DevStudio 中复跑
 5. **节点 method 一致**？loudness zwst vs zwtv、sharpness din vs aures，差 10-30%
 6. **节点本身 emit_error**？`flow_node_logs` 看 stderr / traceback
 7. **输出全 NaN/Inf**？检查 stimulus 是否激发数值病态（chirp_end ≥ Nyquist 混叠、silence 喂 log）
-8. **多通道结果跟单通道一样**？检查节点 manifest `channels_mode` —— v1.11+ 默认 `per_channel` 应自动展开；如果仍是单 item，可能节点没改造（仍用老 `load_audio` 路径），或显式声明 `mix_down`。要按通道分析可以上游用 `channel_split` 兜底。
+8. **多通道结果跟单通道一样 / 多通道直接报错**？检查节点 manifest `channels_mode` —— 不声明 = `requires_single`（多通道 fail-fast 报错）；要按通道自动展开成 N item，节点得显式声明 `channels_mode: per_channel`。若节点声明了 per_channel 却仍是单 item，可能上游本来就是单通道，或节点 run.py 没按 per_channel 改造。严格单声道节点（requires_single）要分析多通道，上游用 `channel_split` / `channel_select` 兜底。
 9. **测阶跃响应没看到爬升**？step 默认 `step_at_s=0` 是全程 DC 不是真阶跃，必须设 `step_at_s > 0`
 
 ## 边界提醒（主动告诉用户）

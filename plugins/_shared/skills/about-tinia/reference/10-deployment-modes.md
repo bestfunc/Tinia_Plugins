@@ -1,17 +1,21 @@
 # 部署模式
 
-> Tinia 的 4 种部署形态（SaaS / 公司私有化 / 桌面单机 / 未来 Production）的差异。给销售评估客户场景用。
+> Tinia 的部署形态差异，给销售评估客户场景用。
+>
+> **先厘清两件事**：代码里的 **edition（部署形态）只有 3 个**：`saas` / `server` / `desktop`。而 Community / Pro / Production 是**商业 SKU（打包概念）**，不是 edition flag —— Community 与 Pro 同属 `desktop` edition，差异在激活与功能档；Production（产线版）目前是**路线图 / 规划中**，代码里没有 `production` edition 常量。详见 `03-edition-comparison.md`。
 
 ---
 
 ## 速览
 
-| 模式 | Edition | 谁用 | 物理形态 | 联网要求 |
+| 部署形态 | Edition（代码） | 谁用 | 物理形态 | 联网要求 |
 |---|---|---|---|---|
-| **SaaS** | `saas` | 个人 / 小团队 / 早期客户 | 公网托管（`tinia-saas.bestfunc.com`） | 必须联网 |
+| **SaaS** | `saas` | 个人 / 小团队 / 早期客户 | 公网托管 | 必须联网 |
 | **公司私有化** | `server` | 中大型企业 / 安全敏感行业 | 客户内网服务器 | 内网即可，激活/更新时偶尔联网 |
 | **桌面单机** | `desktop` | NVH 工程师个人 / 学生 / 独立顾问 | Windows / macOS 桌面 app | 首次激活联网，之后离线可用 |
-| **Production（2027）** | `production` | 工厂在线监测 | 边缘节点 + 云端协调 | 边缘 + 云混合 |
+| **Production（产线版）** | — *（规划中，无独立 edition）* | 工厂在线监测 | 边缘节点 + 云端协调（设想） | 边缘 + 云混合（设想） |
+
+> 表里 SaaS / Server / Desktop 对应真实存在的三档 edition；Production 是**设想中的产品形态**，尚无对应 edition flag，相关描述均为路线图措辞。
 
 ---
 
@@ -56,7 +60,7 @@
 ### 当前状态
 
 - `tinia-saas.bestfunc.com` 已上线
-- Pro 商业版本 2026 H2 主交付
+- Pro 商业版本已交付
 
 ---
 
@@ -133,10 +137,10 @@
    │  │  Wails 主进程   │      │
    │  │  + WebView2 UI │      │
    │  └───────┬────────┘      │
-   │          │ spawn          │
+   │          │ 自举(同一 binary)│
    │  ┌───────┴────────┐      │
-   │  │ tinia-cli.exe  │      │
-   │  │ (daemon)       │      │
+   │  │ tinia daemon   │      │
+   │  │ (子命令常驻)    │      │
    │  └───────┬────────┘      │
    │          │                │
    │  ┌───────┴────────────┐  │
@@ -149,6 +153,8 @@
    │  └────────────────────┘  │
    └─────────────────────────┘
 ```
+
+> **入口链路**：桌面版是**同一个主 binary**用 `--desktop` 启动后，以 `daemon` 子命令把后端常驻起来 + Wails 窗口接管 UI（`cmd/server/main.go`：runSolo → runDesktopSetup / runDesktopFull）。不是单独的 `tinia-cli.exe` 那个 CLI 二进制。`--desktop` 还支持 `--setup` / `--window` / `--no-window`。
 
 ### 适合谁
 
@@ -206,11 +212,14 @@
 | Windows 10/11 x64 | ✅ 主力 | NSIS installer + WebView2 bootstrapper |
 | macOS 12+ Apple Silicon | ✅ | .app bundle + DMG |
 | macOS 12+ Intel | ✅ | 同上 |
-| Linux | 🔜 规划 | AppImage 包，2027 之前看用户呼声 |
+| Linux | 🔜 规划 | AppImage 包，路线图（视用户呼声）|
 
 ---
 
-## 4. Production（2027 规划，在线产线）
+## 4. Production（产线版，规划中 / 路线图）
+
+> 以下为**设想中的产品形态**，尚未交付，代码里无 `production` edition。措辞均为路线图。
+
 
 ### 部署形态
 
@@ -253,28 +262,37 @@
 
 ### 当前状态
 
-**未上线**。2027 启动设计，路线图详见 `08-roadmap.md`。
+**未上线 / 规划中**（changelog v1.24 明确标注 Production 为"规划中"，是目前唯一明确未交付的主线产品形态）。设计与路线图详见 `08-roadmap.md`。
 
 当前类似需求可用 SmartQuality（Bestfunc 现有产品）+ Tinia Pro 桌面版（离线分析调参）过渡。
 
 ---
 
-## 同一份代码，4 种部署
+## 同一份代码，3 种 edition
 
-**关键设计**：4 种部署用同一份主仓代码（除了 Production 未来会加流处理层）。
-
-通过 `cfg.Edition` 字段控制：
+**关键设计**：三种部署用同一份主仓代码。代码里 edition 只有三个有效值：
 
 ```go
+// internal/config/config.go
+const (
+    EditionDesktop = "desktop"
+    EditionServer  = "server"
+    EditionSaas    = "saas"
+)
+// IsValidEdition 只认这三个；无 EditionProduction / community / pro 常量
+
 switch cfg.Edition {
-case "saas":     // 多 Org，组织管理 UI，外部 PG/MinIO
-case "server":   // 单 Org，外部 PG/MinIO
-case "desktop":  // 单 Org，内嵌 PG，setup wizard
-case "production": // 流处理 + 多机协同（未来）
+case "saas":    // 多 Org，组织管理 UI，外部 PG/MinIO
+case "server":  // 单 Org，外部 PG/MinIO
+case "desktop": // 单 Org，内嵌 PG，setup wizard（Community/Pro 同属此 edition）
 }
 ```
 
+**edition 怎么确定**：`ResolveEdition` 优先级 = env `TINIA_EDITION` > 构建期 ldflags `config.DefaultEdition` > 兜底 `server`。桌面构建用 `-X .../config.DefaultEdition=desktop`；SaaS 靠 `TINIA_EDITION=saas` 环境变量（**没有 `--saas` flag**）。
+
 前端通过 `/api/v1/meta` 拿 edition 字段，按 edition 分叉 UI。
+
+> Production 产线版（规划中）若落地，会在此之上加流处理层；当前它**不是**一个 edition 分支。
 
 详见 `02-architecture.md`、`Tinia/docs/architecture-v2.md`。
 
@@ -297,7 +315,7 @@ case "production": // 流处理 + 多机协同（未来）
 │   └── 团队成员各自分析 → Desktop × N seat
 │
 └── 工厂 / 设备厂（在线监测）
-    └── 等 2027 Tinia Production；当前过渡：SmartQuality + Tinia Pro Desktop 调参
+    └── 等 Tinia Production（规划中）；当前过渡：SmartQuality + Tinia Pro Desktop 调参
 ```
 
 ### 销售常见问题

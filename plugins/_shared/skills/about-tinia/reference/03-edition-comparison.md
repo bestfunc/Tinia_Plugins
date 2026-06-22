@@ -1,6 +1,8 @@
 # 产品矩阵对比
 
 > 一张表看清 Community / Pro / Server / SaaS / Production 五个 SKU 的差异。给客户做评估、给销售判断推荐时直接引用此页。
+>
+> 当前 Community/Pro/Server/SaaS 四档已交付，Production 在路线图。注意 **SKU 是商业打包概念，代码 edition 只有 desktop/server/saas 三个**（见下方提示框）。
 
 ---
 
@@ -11,40 +13,50 @@
 | **Community** | 桌面单机（免费版）| 个人 | ✅ 已交付 | 入门 + 生态层，反向培养未来用户 |
 | **Pro** | 桌面单机（付费版）| 个人工程师 | ✅ 已交付 | 个人工程师的完整工作站 |
 | **Server** | 私有化 web（付费）| 团队 / 组织 | ✅ 已交付 | 公司内网部署，团队协作 |
-| **SaaS** | 公网托管 web（付费）| 团队 / 组织 | 🔜 规划中 | 多组织云端版，0 部署 |
-| **Production** | 边缘+云（项目制）| 工厂 | 🔜 规划中（2027）| 在线产线监测 |
+| **SaaS** | 公网托管 web（付费）| 团队 / 组织 | ✅ 已交付 | 多组织云端版（多租户），0 部署 |
+| **Production** | 边缘+云（项目制）| 工厂 | 🔜 路线图 / 规划中 | 在线产线监测 |
 
-**当前商业化阶段（2026 H2 首发）**：Community + Pro + Server 三个 SKU 已可交付。SaaS / Production 在路线图，后期推出。
+**当前阶段**：Community / Pro / Server / **SaaS 四个 SKU 均已交付**（SaaS 已支持多租户多组织、组织间数据严格隔离）。Production 仍在路线图，后期推出。
+
+> ⚠ **SKU ≠ 代码 edition（重要）**
+> 代码层（`server/internal/config/config.go`）只定义 **3 个部署 edition**：`desktop` / `server` / `saas`，`IsValidEdition` 只认这三个，**没有 `community` / `pro` / `production` 任何 edition 常量**。
+> - **Community vs Pro**：两者都跑在 `desktop` edition 上，区别是**是否激活** —— 桌面激活校验中间件 `EnforceDesktopActivation` 在未激活时受限。Community/Pro 是商业 SKU / 打包概念。
+> - **Server / SaaS**：分别对应 `server` / `saas` edition flag。
+> - **Production**：暂无对应 edition flag，是路线图项；下表「edition flag」列中 Production 一格留空（不要写成 `production`）。
+> - edition 解析优先级：环境变量 `TINIA_EDITION` > 构建期 ldflags `DefaultEdition` > 兜底 `server`。桌面构建用 `-X .../config.DefaultEdition=desktop`；SaaS 靠 `TINIA_EDITION=saas`（没有 `--saas` 启动参数，桌面用 `--desktop`，无参数则 runServer 由环境变量决定 server/saas）。
 
 ---
 
 ## 主要差异对比
 
-| 维度 | Community | Pro | Server | SaaS（规划）| Production（规划）|
+| 维度 | Community | Pro | Server | SaaS | Production（路线图）|
 |---|---|---|---|---|---|
 | **代际定位** | 入门 + 生态 | 个人工作站 | 团队协作工作站 | 云端多组织 | 在线产线 |
 | **目标用户** | 学生 / 研究者 / 个人 | NVH 工程师 / 独立顾问 | 公司 NVH 部门 / Tier1 测试团队 / 检测中心 | 个人 / 小团队 / 早期客户 | 工厂在线监测 |
 | **部署形态** | 桌面单机（Windows / macOS）| 桌面单机（Windows / macOS）| 私有化 web（公司内网服务器） | 公网托管 | 边缘节点 + 云端 |
-| **edition flag** | `desktop`（未激活 / 限制版） | `desktop`（已激活付费）| `server` | `saas` | `production` |
+| **代码 edition flag** | `desktop`（未激活 / 限制版） | `desktop`（已激活付费）| `server` | `saas` | （暂无，路线图）|
 | **用户数** | 单用户 | 单用户 | 多用户（团队）| 多用户（跨组织）| 工厂级 |
 | **节点访问** | 基础节点 + 商店免费节点 | 全部节点 + 商店付费节点 | 同 Pro | 同 Pro | Pro 全部 + 实时流处理节点 |
 | **流程复杂度** | 限定（规划：节点数 / 通道数）| 不限 | 不限 | 不限 | 不限 + 多机分布式 |
-| **AI 辅助** | ✅ MCP | ✅ MCP + 高级 AI 编排 | ✅ + 团队 AI 共享 | ✅ | ✅ + AI 异常诊断 |
+| **AI 辅助（MCP）** | ✅ MCP | ✅ MCP + 高级 AI 编排 | ✅ + 团队 AI 共享 | ✅ | ✅ + AI 异常诊断 |
+| **SDK 外部调用** | ✅ Python SDK（同机直连）| ✅ Python SDK | ✅ + 超管 SDK 管理/调用分析 | ✅ + 超管 SDK 管理/调用分析 | ✅ + 实时数据流采集 |
+| **实时流式会话** | ✅ | ✅ | ✅ | ✅ | ✅（产线在线） |
+| **常驻执行加速** | ✅ 热进程池 | ✅ 热进程池 | ✅ + 预热白名单 | ✅ + 预热白名单 | ✅ 产线常驻 |
 | **多通道** | 单通道 | 多通道 | 多通道 | 多通道 | 多机多通道 |
 | **报告导出** | ❌ | ✅ PDF/Word/PPT + 4 模板 | ✅ + 组织级模板库 | ✅ | ✅ + 自动定时报告 |
+| **看板（Dashboard）** | 基础 | 完整（富媒体 + 分享）| 完整 + 团队共享 | 完整 + 多组织 | 完整 + 实时刷新 |
 | **Order Tracking** | ❌ | ✅ | ✅ | ✅ | ✅ |
-| **团队管理** | ❌（单用户）| ❌（单用户）| ✅ 用户/角色/权限管理 | ✅ + 多组织 | ✅ 工厂级 |
+| **团队管理** | ❌（单用户）| ❌（单用户）| ✅ 用户/角色/权限管理 | ✅ + 多组织切换 | ✅ 工厂级 |
 | **凭据共享** | ❌ | ❌（本机）| ✅ 组织级共享 | ✅ 组织级 | ✅ |
 | **流程模板** | 本机 | 本机 | ✅ 组织级模板库 | ✅ 组织级 | ✅ |
 | **数据源共享** | ❌ | ❌（本机）| ✅ 组织级 | ✅ | ✅ |
-| **看板（Dashboard）** | 基础 | 完整 | 完整 + 团队共享 | 完整 | 完整 + 实时刷新 |
 | **数据库 / MES 集成** | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **告警 / 异常推送** | ❌ | ❌ | ❌ | ❌ | ✅ |
 | **模型 OTA / 流程热更新** | 节点商店即时更新 | 节点商店即时更新 | 同 + 组织内统一推送 | 同 | ✅ 跨机器全局 |
-| **数据安全** | 100% 本机 | 100% 本机 | 100% 内网 | 公网托管 | 边缘 + 云混合 |
+| **数据安全** | 100% 本机 | 100% 本机 | 100% 内网 | 公网托管（多租户隔离）| 边缘 + 云混合 |
 | **联网要求** | 首次激活联网 | 首次激活联网 | 内网即可（激活/更新偶尔联网）| 必须联网 | 边缘 + 云 |
-| **定价** | 免费（商店节点单独收费）| 按 seat 订阅 / 永久买断 | 按团队规模 + seat 订阅 / 买断 | 按 seat 订阅（规划）| 按项目（含咨询服务）|
-| **支持** | 社区（GitHub Discussions）| 邮件 + Discord + 工单 | 优先支持 + 实施服务 | 在线工单（规划）| 专属技术支持 + SLA |
+| **定价** | 免费（商店节点单独收费）| 按 seat 订阅 / 永久买断 | 按团队规模 + seat 订阅 / 买断 | 按 seat 订阅 | 按项目（含咨询服务）|
+| **支持** | 社区（GitHub Discussions）| 邮件 + Discord + 工单 | 优先支持 + 实施服务 | 在线工单 | 专属技术支持 + SLA |
 
 ---
 
@@ -187,29 +199,30 @@ Community 用户用一段时间后碰到限制（节点数 / 通道 / 报告需�
 
 ---
 
-## SaaS —— 多组织云端（规划中）
+## SaaS —— 多组织云端（已交付）
 
-### 目标用户（规划）
+### 目标用户
 
 - **个人 / 小团队**：免运维、零部署、按需付费
 - **跨公司协作场景**：多组织共享流程模板 / 数据源
 - **早期试用客户**：注册即用，无需采购流程
 
-### 提供什么（规划）
+### 提供什么
 
 跟 Server 类似能力，区别在：
 
-- 部署在公网（如 `tinia-saas.bestfunc.com`），用户注册账号即用
-- 支持多组织（一个 Tinia 实例托管多个 Org）
+- 部署在公网，用户注册账号即用（`saas` edition，靠 `TINIA_EDITION=saas` 启动）
+- **多租户多组织**：一个 Tinia 实例托管多个 Org，**组织间数据严格隔离**；一人可属多组织，顶部组织切换器切换；角色简化为"超管"单标记 + 用户组权限按组织独立
 - 按 seat 订阅，月付 / 年付灵活
+- 与 Server 同源的看板 / SDK / MCP / AutoML 等全部能力；超管侧 SDK 管理 + 调用分析
 
 ### 当前状态
 
-代码层面 `EditionSaas` 已支持，但**对外正式商业化版本规划中**。当前 SaaS 模式可用作内部测试、早期客户预览。
+**已交付并对外可用**（changelog v1.24 标注"5 个产品形态完整支持"，其中 SaaS 已交付）。多租户组织化在 v1.17 全面落地。
 
 ---
 
-## Production —— 在线产线（规划中，2027）
+## Production —— 在线产线（路线图 / 规划中）
 
 ### 目标用户
 
@@ -243,10 +256,10 @@ Community 用户用一段时间后碰到限制（节点数 / 通道 / 报告需�
 
 ```
                  ↗ Pro（个人付费）↗
-   Community ──┤                  ├─ Production（工厂在线，2027）
+   Community ──┤                  ├─ Production（工厂在线，路线图）
                  ↘ Server（团队付费） ↘
                           ↓
-                      SaaS（规划）
+                      SaaS（云端多组织，已交付）
 ```
 
 **关键设计**：
@@ -271,26 +284,26 @@ Community 用户用一段时间后碰到限制（节点数 / 通道 / 报告需�
 | "我们是 Tier1 测试部门 / 检测中心" | Server（多 seat）| 模板库 + 团队协作 + 报告标准化 |
 | "我们想给整车厂出标准测试报告" | Server | 主机厂模板按组织维护 |
 | "我们公司合规要求数据不出域" | Server（私有化）| 数据 100% 内网 |
-| "我们风电场 30 个机组要做 PdM" | Production（2027 启动 PoC，现在用 SmartQuality 过渡）| 等 Production 上线 |
+| "我们风电场 30 个机组要做 PdM" | Production（路线图，现在用 SmartQuality 过渡）| 等 Production 上线 |
 | "我们是大学教授，想给学生开课" | Community + 教育许可 | 教学场景免费，部分节点商店内容可申请教育折扣 |
 | "我个人尝试 + 学习" | Community | 免费，限制对个人无影响 |
-| "想要 0 部署 + 注册即用" | SaaS（规划中，可联系销售加入早期内测）| 当前还没有 |
+| "想要 0 部署 + 注册即用" | SaaS（已交付）| 公网托管、多组织、注册即用 |
 
 更多场景判断 → `scenarios/`、`05-target-customers.md`。
 
 ---
 
-## 商业化首发覆盖
+## 交付状态总览
 
-| SKU | 2026 H2 首发 | 后期 |
+| SKU | 状态 | 备注 |
 |---|---|---|
-| Community | ✅ | 持续 |
-| Pro | ✅（含 3 seat × 3 个月免费试用）| 持续 |
-| Server | ✅ | 持续 |
-| SaaS | 第二期开放 | — |
-| Production | 2027 启动 PoC | 2027 H2 首批客户 |
+| Community | ✅ 已交付 | 桌面未激活版 |
+| Pro | ✅ 已交付 | 桌面激活付费版 |
+| Server | ✅ 已交付 | 私有化 web |
+| SaaS | ✅ 已交付 | 多租户多组织云端 |
+| Production | 🔜 路线图 / 规划中 | 在线产线，尚未交付 |
 
-首发就把 **Community / Pro / Server** 三档全开放，给客户完整选择空间。详见 `commercialization-todo.md`。
+**Community / Pro / Server / SaaS 四档均已交付**，给客户完整选择空间。Production 是目前唯一明确未交付的主线 SKU。详见 `commercialization-todo.md`、`08-roadmap.md`。
 
 ---
 

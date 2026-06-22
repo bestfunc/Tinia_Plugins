@@ -21,8 +21,14 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 | `AudioData` | **超类型** —— 等价于"可用的音频数据"，兼容 MaterializedDataset / ProcessedDataset / AudioData | 下游统一按 items[].blob_uri 读 |
 | `IndicatorData` | 分析输出（单标量指标） | `{indicator: "loudness", items: [{item_id, name, value, _provenance, ...}]}` |
 | `FeatureMatrix` | 分析输出（多列特征矩阵） | `{columns: [...], labels: {key: 中文名}, rows: [{item_id, name, features: {col: val}}]}` |
+| `AttributeTable` | 属性/标签表（从 items 提取字段、聚类标签等输出） | `{columns: [...], rows: [{item_id, <alias>: val, ...}], total, source_total}` |
+| `BaselineStats` | 基线统计阈值（baseline_stats 输出，给异常检测当参考） | `{columns: [...], feature_direction: {col: "high"/"low"/"both"}, thresholds: {col: {mean, std, min, max, count, p5, p95, ...}}, sample_count}` |
+| `AnomalyResult` | 异常检测结果（zscore_anomaly 输出） | `{summary: {total, ok_count, anomaly_count, feature_names, method, thresholds}, items: [{item_id, name, status: "ok"/"anomaly", severity, n_triggers, triggers, features}], views: {distribution, spectrum_ref, audio_ref}}` |
 | `AnnotationLayer` | 段落标注层（有效段检测等输出） | `{items: [{item_id, segments: [{start, end, label}]}]}` |
 | `FileBlob` | 单个文件（CSV 导出、报告等） | Handle 自带 `uri / hash / size / mime` |
+| `Table` | 通用二维表 | `{columns, rows}` 风格 |
+| `ItemList` | 通用 items 列表（轻量，不要求音频语义） | `{items: [...], total}` |
+| `Json` / `Number` / `String` / `Bool` | 标量/任意 JSON 端口（参数透传、小配置块、可选引用 handle 等） | 对应原生 JSON 值 |
 
 ## 超类型兼容规则
 
@@ -63,7 +69,10 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 | 要读已处理过的音频（如 active_segment 切完的段） | `ProcessedDataset` |
 | 接收单值指标做二次分析 | `IndicatorData` |
 | 接收多列特征矩阵（或聚合 / 评分预测 / 通用消费） | `FeatureMatrix`（自动也接 IndicatorData） |
+| 接收基线阈值做异常判定 | `BaselineStats`（如 zscore_anomaly.baseline） |
+| 接收属性/标签表做染色、分组、二次筛选 | `AttributeTable`（如 cluster_explore / matrix_view） |
 | 接收标注层做后续处理 | `AnnotationLayer` |
+| 接收原始 items 做字段提取（不要求音频语义） | `Any`（如 attribute_extract.dataset，兼容任何上游） |
 | 做通用透传（合并、复制、筛选等） | `Any` |
 
 ## 怎么选输出类型
@@ -73,8 +82,13 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 - **转换节点**（音频→音频）→ `ProcessedDataset`
 - **分割/选择节点** → `ProcessedDataset`（保持音频语义）
 - **标注检测** → `AnnotationLayer`
+- **属性提取 / 聚类标签**（从 items 抽字段或打标签，输出 `{columns, rows}`）→ `AttributeTable`（如 `attribute_extract.table` / `cluster_explore.clusters`）
+- **基线统计**（算出每列特征的 mean/std/分位阈值，供异常检测当参考）→ `BaselineStats`（如 `baseline_stats.baseline`）
+- **异常检测**（拿特征 + 基线判 ok/anomaly，带 severity 与分布视图）→ `AnomalyResult`（如 `zscore_anomaly.result`）
 - **导出节点**（CSV/报告） → `FileBlob`
 - **items + attributes 风格**（如 `score_predictor.scored`）→ 类型 `Any`，结构 `{items:[{item_id, attributes:{score, predicted}, features:{...}}], labels:{...}}` —— chart_viewer 自适应解析
+
+> 分析链路常见接法：`分析节点→FeatureMatrix` →（`baseline_stats`→`BaselineStats`）→ `zscore_anomaly`（同时接 FeatureMatrix + BaselineStats）→`AnomalyResult`；`attribute_extract`（Any→`AttributeTable`）的标签可喂给 `cluster_explore` / `matrix_view` 做染色分组。
 
 ## 动态端口
 
@@ -101,7 +115,9 @@ dynamic_inputs:
 直接调 `nodes_list_types` 得到：
 ```json
 {
-  "types": ["Any", "Dataset", "MaterializedDataset", "ProcessedDataset", "AudioData", "IndicatorData", ...],
+  "types": ["Any", "Dataset", "MaterializedDataset", "ProcessedDataset", "AudioData", "IndicatorData",
+            "ItemList", "FileBlob", "Table", "FeatureMatrix", "BaselineStats", "AnomalyResult",
+            "AttributeTable", "AnnotationLayer", "Number", "String", "Bool", "Json"],
   "super_types_doc": {
     "AudioData": "超类型：...",
     "Any": "通配：..."

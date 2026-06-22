@@ -21,7 +21,9 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 ## 当前节点清单（截至 2026 H1）
 
-> Tinia 官方节点（`bestfunc/*` namespace），共 33+ 个。覆盖核心声学 / 振动算法 + 数据源 + 可视化。
+> Tinia 官方节点（`bestfunc/*` namespace）。其中 **Tinia_nodes 仓库内的 Python 节点约 41 个**，外加主仓 daemon 内置的 Go 节点（数据源 / 数据流 / 看板等）。覆盖从信号生成、预处理、声学 / 心理声学 / 振动分析、特征工程到可视化的完整链路。
+>
+> ⚠ 标记系统 v1（diffgram）数据源节点位于独立仓库 `Tinia_nodes_diffgram`，不在官方分析节点集合内。
 
 ### 数据源 / 数据流（builtin Go 节点）
 
@@ -40,57 +42,75 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `csv_export` | 把数据集 items 导出 CSV | ❌ |
 | `print_console` | 调试节点，把任意输入打印到 stderr | ❌ |
 
-### 信号处理 / 数据准备
+### 信号源（source）
+
+| 节点 | 说明 |
+|---|---|
+| `signal_generator` | 信号发生器（11 种波形 / 多通道 / chirp 扫频 / 可复现噪声种子）|
+
+### 信号处理 / 数据准备（preprocess）
 
 | 节点 | 说明 |
 |---|---|
 | `audio_segment_split` | 按时间 / 段长切割音频 |
-| `active_segment` | 自动检测有效段（活动段提取）|
+| `active_segment` | 有效段检测（v2 重构，输出 AnnotationLayer + 阈值可视化）|
 | `convergent_trim` | 收敛剔除（去除异常段）|
-| `weighting_filter` | A/B/C 计权滤波 |
+| `weighting_filter` | 频率计权滤波（A/B/C + 已吸收原 `iso_weighting`）|
 | `fir_filter` | FIR 数字滤波器 |
 | `iir_filter` | IIR 数字滤波器（巴特沃斯 / 切比雪夫等）|
+| `signal_math` | 信号数学运算（合并了原 `vibration_convert`）|
 | `channel_split` | 多通道拆单通道 |
 | `channel_select` | 选择部分通道 |
 
-### 频域分析
+### 频域 / 谱分析（analysis）
 
 | 节点 | 说明 |
 |---|---|
 | `fft_spectrum` | FFT 频谱 |
+| `octave_analysis` | 倍频程 / 三分之一倍频程（含 Tailored Octave）|
+| `modulation_spectrum` | 调制谱分析（NVH / 声品质，自定义表单标杆）|
+| `scale_space_spectrum` | 多尺度谱分析（输出尺度σ×频率×时间谱栈 + 跨尺度统计，GPU 加速）|
+| `order_tracking` | 阶次跟踪（旋转机械）|
 | `spectrum_smooth` | 频谱平滑 |
-| `octave_analysis` | 倍频程 / 三分之一倍频程 |
-| `spectrum_viewer` | 频谱图可视化 |
 
-### 时域 / 时频特征
+### 振动 / 旋转机械（analysis）
 
 | 节点 | 说明 |
 |---|---|
-| `fbank_extract` | Filter bank 特征 |
-| `st_features` | 短时统计特征 |
-| `attribute_extract` | 信号属性提取 |
-| `baseline_stats` | 基线统计（建立参考样本）|
+| `envelope_demod` | 包络解调（振动 / 轴承故障）|
+| `time_stats` | 时域统计（RMS / Crest / Kurtosis 等）|
 
-### 心理声学指标
+### 时域 / 时频特征（analysis / feature）
+
+| 节点 | 说明 |
+|---|---|
+| `fbank_extract` | 频谱特征提取（filter bank）|
+| `st_features` | 结构张量特征（谱图纹理特征）|
+| `attribute_extract` | 属性提取（输出 AttributeTable）|
+| `baseline_stats` | 基线统计（建立参考样本）|
+| `audio_emit` | 波形输出（把 AudioData 降采样成 vs_time 指标）|
+
+### 心理声学指标（analysis）
 
 | 节点 | 说明 |
 |---|---|
 | `loudness` | 响度（Zwicker 标准）|
 | `sharpness` | 尖锐度 |
 | `roughness` | 粗糙度（基于 mosqito）|
-| `tonality` | 音调度（Tone-to-Total Ratio）|
+| `tonality` | 音调性 |
 | `tnr` | TNR（Tone-to-Noise Ratio）|
 
-### 指标计算 / 整理
+### 指标计算 / 整理（analysis / transform / feature）
 
 | 节点 | 说明 | 动态端口 |
 |---|---|---|
-| `level_meter` | 声级表（dBA / dBZ 等）| ❌ |
+| `level_meter` | 声级计（dBA / dBC / dBZ + IEC 61672）| ❌ |
 | `indicator_math` | 指标数学运算（加减乘除 / 阈值判断等）| ❌ |
 | `indicator_merge` | 多源指标合并 | ✅ in_N（2-8）|
-| `feature_merge` | 多源特征合并 | ✅ in_N（2-8）|
+| `feature_merge` | 特征聚合（FeatureMatrix 超类型核心枢纽）| ✅ in_N（2-8）|
 | `feature_normalize` | 特征归一化（Z-score / Min-Max 等）| ❌ |
-| `annotation_merge` | 多源段落标注合并 | ✅ in_N（2-8）|
+| `annotation_merge` | 标注合并（2~16 层 AnnotationLayer）| ✅ in_N（2-16）|
+| `spec_limit_check` | 限值检查（阶梯上下限判定，独立 limit 端口）| ❌ |
 
 ### 动态端口节点 — 重要常识
 
@@ -103,20 +123,22 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 更多详见 `flow-author` skill 的"动态端口节点"专章。
 
-### 可视化
+### 可视化（viewer）
 
 | 节点 | 说明 |
 |---|---|
-| `indicator_viewer` | 单指标查看器（时序 / 频谱 / 排序表） |
-| `spectrum_viewer` | 频谱查看器（2D 热力图 + 3D 多种模式） |
-| `chart_viewer` | **通用图表查看器**（v1.26+）—— 接行列表格做柱状/散点/折线/箱线/直方 5 种图，左侧可折叠面板、X 轴样式弹出菜单 |
-| `matrix_view` | 矩阵可视化（如混淆矩阵 / 相关性矩阵）|
+| `indicator_viewer` | 指标查看器（4 布局 + 限值叠加阶梯虚线 + 音频指针） |
+| `spectrum_viewer` | 频谱查看器（2D/3D 热力图 + 音频联动 + 多尺度谱栈模式） |
+| `chart_viewer` | **通用图表查看器**（v1.26+）—— 接行列表格做柱状/散点/折线/箱线/直方 5 种图 + 数据表（排序/筛选/列显隐/导出 CSV），可接「原始音频」按 item_id 关联真实标签 |
+| `matrix_view` | 透视矩阵（features×attributes join 热力矩阵）|
 
-### 高级分析 / 异常检测
+> 多数 viewer 同时实现「看板协议」适配（顶栏分享、tile/card 可拖拽、属性面板），可被前端看板直接消费。
+
+### 高级分析 / 异常检测（feature）
 
 | 节点 | 说明 |
 |---|---|
-| `cluster_explore` | 聚类探索（PCA / UMAP 降维 + 可视化）|
+| `cluster_explore` | 聚类探索（KMeans / DBSCAN / HDBSCAN / GMM + PCA / UMAP / t-SNE 降维）|
 | `zscore_anomaly` | Z-score 异常检测 |
 | `score_predictor` | **AutoML 评分预测**（v1.26+）—— 接 AutoML 判别函数 JSON，按公式跑每行 score + 预测类别，支持 5 种算法（逻辑回归 / 线性判别 / 二阶多项式 / 决策树 / 梯度提升树）|
 
@@ -125,6 +147,20 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | 节点 | 说明 |
 |---|---|
 | `dashboard_view` 输出 | 多 Viewer 组合给 Dashboard 用 |
+
+### 实时 / 流式逐帧（v1.22+ 旗舰能力）
+
+> 三大基础分析节点实现**跨窗状态延续**，从"逐窗独立批处理"升级为"无缝实时逐帧"，与主仓 SDK 流式会话（v1.35）端到端配套。
+
+| 节点 | 流式增强 |
+|---|---|
+| `level_meter` | A/C 计权滤波器 `zi` 跨窗延续 + 滚动 Leq + 滚动 percentile |
+| `octave_analysis` | 每频带滤波器 `zi` 跨窗延续 + 滚动平均谱 |
+| `fft_spectrum` | STFT 残留 carry 跨窗无缝 + 线性功率滚动平均谱 |
+
+- emit 新增 `rolling_*` 字段；`_stream_continuous` 标志门控，批量行为零回归。
+- 运行时基座是 SDK 的 **ChunkRuntime（SV2）**——分块流式调度 + `upstream_total` 进度条。节点作者只需声明 `_stream_continuous` 并维护跨窗状态，会话生命周期由 server 侧 SDK 流式会话调度（见 `04-key-concepts.md` / SDK 章节）。
+- `loudness` 因依赖 mosqito 黑盒无法做到无缝，保持"准实时逐窗"。
 
 ### AutoML 链路（v1.25+ 主线能力）
 
@@ -138,7 +174,8 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 ### 节点开发节奏
 
-- 节点列表持续扩充，每月新增 3-10 个
+- 节点列表持续扩充，每月新增数个；单节点各自维护 SemVer（如 `feature_merge` 已到 3.0.0、`active_segment` 2.x，多数稳定节点在 1.x）。
+- 每个节点 `ui/Help.tsx` 内嵌「更新履历」——GraphEditor 在节点版本号旁渲染 HelpCircle 图标，点击弹模态查看说明 + 参数 + 算法 + 履历。
 - 详细规划节点路线见下方"规划节点路线图"
 - 跟 HEAD 134 项笛卡尔积清单对比 → 详见 `06-competitive-landscape.md`
 
@@ -154,10 +191,10 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 |---|---|---|
 | `stft` | 短时傅里叶变换 | 时频联合分析基础 |
 | `spectrogram` | 频谱图（基于 STFT 的可视化）| NVH 工程师每天必用 |
-| `audio_player` | 音频播放器（联播频谱）| 频谱跟原始音频联动 |
 | `psd_welch` | Welch 法功率谱密度估计 | 平稳信号谱估计标准方法 |
-| `time_domain_stats` | 时域统计套件（RMS / Crest / Kurtosis 等）| 振动信号基础指标 |
-| **基础设施增强**：物理量+单位系统贯通（Pa / g / m/s，calibration 完整链路）| | 让数据有正确"物理量+单位"标签 |
+| ~~`audio_player`~~ | ✅ 已落地：`spectrum_viewer` 内置音频联动指针 | — |
+| ~~`time_domain_stats`~~ | ✅ 已落地为 `time_stats` 节点 | — |
+| ~~物理量+单位系统贯通~~ | ✅ 已落地：通道物理量语义（声压 / 加速度 / 速度等 11 种 + 传感器灵敏度自动换算，v1.32）+ 独立「通道模板」页（v1.34）| — |
 | **报告导出**：PDF / Word / PPT，4 个内置模板 | | 不是节点，是平台级导出能力 |
 | **多运行 overlay 对比** | | 不是节点，是 Viewer 增强 |
 
@@ -171,7 +208,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `rpm_resample` | 角度域重采样（按转速插值到等角度采样）| 阶次分析前置 |
 | `order_spectrum` | 阶次谱（频率轴 → 阶次轴）| 旋转机械经典分析 |
 | `campbell_plot` | Campbell 图（阶次 vs RPM 三维）| NVH 演化可视化 |
-| `order_tracker` | 阶次跟踪器（提取某阶次能量 vs RPM）| 主谐波 / 齿轮啮合频率分析 |
+| ~~`order_tracker`~~ | ✅ 已落地为 `order_tracking` 节点（阶次跟踪）| — |
 | `runup_detect` | Run-up / Coast-down 工况识别 | 自动从信号中识别启停段 |
 | `psychoacoustic_vs_rpm` | 心声指标 vs RPM（在现有 loudness / sharpness / roughness 接入 RPM 横轴）| 心声-工况联合 |
 | `can_signal_input` | CAN 总线信号接入（简版）| 整车信号集成 |
@@ -185,7 +222,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `coherence` | 相干函数 | 系统线性度判断 |
 | `cross_spectrum` | 互谱 | 信号对分析 |
 | `auto_spectrum` | 自谱 | 信号自相关分析 |
-| `envelope_spectrum` | 包络谱 | **PdM 突破**，轴承故障检测 |
+| ~~`envelope_spectrum`~~ | ✅ 已落地为 `envelope_demod`（包络解调，轴承故障检测）| — |
 | `spectral_kurtosis` | 谱峭度 | 故障频段识别 |
 | `cepstrum` | 倒谱 | 传动系统 / 语音分析 |
 | `iso10816_judge` | ISO 10816 振动等级判定 | 工业振动标准合规 |
@@ -194,8 +231,8 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 
 | 节点 | 说明 | 状态 |
 |---|---|---|
-| `modulation_spectrum` | 调制谱 | 已有研究材料，产品化成本低 |
-| `fluctuation_strength` | 心声波动强度 | 同上 |
+| ~~`modulation_spectrum`~~ | ✅ 已落地（调制谱分析，自定义表单标杆）| 已发布 |
+| `fluctuation_strength` | 心声波动强度 | 已有研究材料，产品化成本低 |
 | `wavelet_transform` | 小波变换 | 同上 |
 
 ### 2026 H2 不做（Won't Have）
@@ -209,9 +246,11 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | **建筑声学** | `rt60` / `sti` 等 | 不是核心客户群 |
 | **Beamforming / 声学相机** | 相关节点 | 需要硬件配合，不做纯软件 |
 
-### 2027 主线 1 — Tinia Production 配套节点
+### 2027 主线 1 — Tinia Production 配套节点（规划中）
 
-> 在线产线版的新节点形态（流处理 + 集成）。
+> 在线产线版（**Production，路线图 / 规划中**）的新节点形态（流处理 + 集成）。
+>
+> 💡 注意：底层**实时数据流能力已部分先行落地**——SDK 流式会话（v1.35）+ 声级计 / 频谱 / 倍频程跨窗无缝逐帧（v1.22）已让"边采边算"在 Pro/Server 上可用；下列偏向"产线集成 / 设备接入 / 推送"方向的节点仍在规划。
 
 | 节点 | 说明 |
 |---|---|
@@ -241,17 +280,18 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 ### 路线节点总览（按时间线）
 
 ```
-2026 H1（已完成）：33 节点基础
+2026 H1（已完成）：约 41 个 Tinia_nodes Python 节点 + 主仓内置 Go 节点
+                  含心声指标全家、振动节点族、多尺度谱、调参/评分链路、看板可视化
    ↓
-2026 H2 W1-W2：第一波 5 节点 + 基础设施增强
+2026 H2 W1-W2：第一波（STFT / spectrogram / Welch PSD）+ 基础设施增强（多已先行落地）
    ↓
-2026 H2 W3-W4：第二波 9 节点（Order Tracking 战役）
+2026 H2 W3-W4：第二波（Order Tracking 战役，order_tracking 已先落地）
    ↓
-2026 H2 W5-W6：第三波 8 节点（System + PdM 抢跑）
+2026 H2 W5-W6：第三波（System + PdM，envelope 已落地）
    ↓
-2026 Q4：累计 55+ 节点
+2026 Q4：累计节点持续增长
    ↓
-2027 H1：Tinia Production 配套 ~10 节点
+2027 H1：Tinia Production 配套节点（规划中）
    ↓
 2027 H2：商店开放，外部贡献节点持续涌入
    ↓
@@ -495,6 +535,23 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 - Tinia 节点 SDK（`tinia_runtime`）是必需的 —— get_input / set_output 是 daemon 跟节点通信的桥梁
 - 但 SDK 很薄，只是 IO 包装，算法本体完全是你自己的代码
 - 可以用任何 Python 库（numpy / scipy / mosqito / pytorch / 自家算法库）
+- **SDK 唯一事实源在主仓 `server/sdk/python/`**，通过 go:embed 嵌进 server 二进制；节点 fork 时由 server 注入 `PYTHONPATH` 指向嵌入版，节点本身**不携带也不依赖物理 SDK 目录**（消除了过去各节点仓自带 SDK 副本导致的协议漂移）。本地开发可 `tinia sdk install --target ./sdk/python/` 拷一份做 IDE 类型提示（gitignore，不进发布）。
+
+> ⚠ 这里的"节点 SDK（`tinia_runtime`）"是给**节点作者写 run.py** 用的运行时契约；跟下文给**外部程序调用平台算力**用的 `tinia_sdk` 客户端是两条不同的东西，别混淆。
+
+### 外部程序调用平台：`tinia_sdk` 通路（v1.33+）
+
+> 这是"节点生态"之外的另一条对外能力——把平台上已调好的分析当成 API 给外部 Python 程序调用。
+
+- 超管「SDK 管理」输入名称即生成可下载 SDK 包，**凭据（license）+ 服务器地址已内置，零配置**；鉴权走打包进 SDK 的 `license.json`（`license_id` + `secret`），不是 api_key。
+- 调用方式：① 直接传节点类型 + 参数；② 用节点表单「复制参数」拿到的参数串；③ 引用平台流程里调好的节点（平台改参自动生效）；整条流程也能整体调用（「API 输入」+「API 输出」节点）。
+- 传数据便利：直接传文件路径（wav/csv/npz/tdms）或内存数组自动上传；同机调用自动走本地直连 + 路径直传（甚至 Unix domain socket），大文件显著更快。
+- **流式会话 / 实时数据流（v1.35）**：可持续往流程推数据、实时取回计算结果，适合在线 / 边采边算场景；实时直调跳过缓存、走内存中转，响应更快。
+- **SDK 调用分析（v1.35）**：超管可查看每个 SDK 的调用量、成功率、耗时、Top 节点、最近失败。
+- 配套加速：**常驻执行池（v1.35）**让分析节点进程常驻待命（只加载一次），SDK 高频 / 实时调用直接复用热进程，省掉每次 fork+import 的固定开销；超管「常驻执行」页可配上限 / 空闲回收 / 预热白名单。
+- 节点帮助新增「SDK 说明」标签页，官方 40 个节点已全部补齐示例代码。
+
+详见 `04-key-concepts.md` 的 SDK / 常驻执行章节。
 
 ### "节点商店分成怎么计算"
 
