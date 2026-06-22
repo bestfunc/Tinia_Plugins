@@ -19,7 +19,7 @@ user-invocable: true
 
 按这个顺序看：
 
-1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 一句话定位 / 5 个 SKU 产品矩阵 / 核心差异化
+1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 一句话定位 / 5 个 SKU 产品矩阵（SKU ≠ 代码 edition）/ 核心差异化
 2. **[reference/06-competitive-landscape.md](./reference/06-competitive-landscape.md)** — 跟 HEAD ArtemiS / Siemens Testlab 等传统 NVH 工具的对比
 3. **[reference/05-target-customers.md](./reference/05-target-customers.md)** — 客户画像（NVH 工程师 / 研究院 / Tier1 / 风电…）+ 他们的痛点
 4. **[reference/07-pricing-business-model.md](./reference/07-pricing-business-model.md)** — 三层定价模型、商业模式
@@ -30,21 +30,21 @@ user-invocable: true
 
 按这个顺序看：
 
-1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 知道 Tinia 是什么
-2. **[reference/02-architecture.md](./reference/02-architecture.md)** — 7 件套架构（主仓 / engine / runtime / nodes / cli / plugins / store）
+1. **[reference/01-product-overview.md](./reference/01-product-overview.md)** — 知道 Tinia 是什么（含 MCP + SDK 两条对外通路）
+2. **[reference/02-architecture.md](./reference/02-architecture.md)** — 现役仓库套件（主仓 / nodes / cli / plugins / store / release / Passport；engine + runtime 已归档）
 3. **[reference/09-tech-stack.md](./reference/09-tech-stack.md)** — Go / React / Wails / Python / PG / MinIO 等选型
-4. **[reference/04-key-concepts.md](./reference/04-key-concepts.md)** — 节点 / 流程 / 数据类型 / blob / DAG 等
+4. **[reference/04-key-concepts.md](./reference/04-key-concepts.md)** — 节点 / 流程 / 数据类型 / blob / DAG / 常驻执行池 等
 5. **[faq/02-developer-questions.md](./faq/02-developer-questions.md)** — 开发者最常问的问题
-6. **[reference/11-mcp-ai-integration.md](./reference/11-mcp-ai-integration.md)** — MCP-native 是怎么回事
+6. **[reference/11-mcp-ai-integration.md](./reference/11-mcp-ai-integration.md)** — MCP-native + SDK 通路是怎么回事
 
 ### 🧐 我是潜在客户 / 投资人 / 行业研究者，要做评估
 
 按这个顺序看：
 
 1. **[reference/01-product-overview.md](./reference/01-product-overview.md)**
-2. **[reference/03-edition-comparison.md](./reference/03-edition-comparison.md)** — Community / Pro / Server / SaaS / Production 五档差异
+2. **[reference/03-edition-comparison.md](./reference/03-edition-comparison.md)** — Community / Pro / Server / SaaS（均已交付）/ Production（路线图）五档差异；SKU ≠ 代码 edition
 3. **[reference/06-competitive-landscape.md](./reference/06-competitive-landscape.md)** — 与传统工具对比
-4. **[reference/08-roadmap.md](./reference/08-roadmap.md)** — 2026 H2 三波交付 + 2027 三主线
+4. **[reference/08-roadmap.md](./reference/08-roadmap.md)** — 已交付现状（SDK 通路 / 流式 / 看板 / 常驻执行）+ 后续三主线
 5. **[faq/01-customer-questions.md](./faq/01-customer-questions.md)** — 客户最常问（数据安全 / 迁移 / 定价等）
 
 ### 📚 我只是想查个术语 / 概念
@@ -59,18 +59,18 @@ user-invocable: true
 
 | 文件 | 内容摘要 |
 |---|---|
-| [01-product-overview.md](./reference/01-product-overview.md) | 一句话定位 / 5 个 SKU 产品矩阵 / 核心差异化三条 |
-| [02-architecture.md](./reference/02-architecture.md) | 7 件套架构 + 仓库关系图 + 数据流 |
-| [03-edition-comparison.md](./reference/03-edition-comparison.md) | Community / Pro / Server / SaaS / Production 功能与目标用户差异 |
-| [04-key-concepts.md](./reference/04-key-concepts.md) | 节点 / 流程 / 类型系统 / blob / DAG / 看板 / namespace |
+| [01-product-overview.md](./reference/01-product-overview.md) | 一句话定位 / 5 个 SKU 产品矩阵（SKU ≠ edition）/ 核心差异化（含 SDK 通路）|
+| [02-architecture.md](./reference/02-architecture.md) | 现役仓库套件 + 仓库关系图 + 数据流（engine/runtime 已归档，新增 Passport）|
+| [03-edition-comparison.md](./reference/03-edition-comparison.md) | Community/Pro/Server/SaaS（均已交付）/ Production（路线图）差异；3 个代码 edition vs 5 个 SKU |
+| [04-key-concepts.md](./reference/04-key-concepts.md) | 节点 / 流程 / 类型系统 / blob / DAG / 看板 / namespace / 常驻执行池 / SDK |
 | [05-target-customers.md](./reference/05-target-customers.md) | 客户画像 + 行业切片 + 痛点对照 |
 | [06-competitive-landscape.md](./reference/06-competitive-landscape.md) | HEAD ArtemiS / Siemens Testlab / Brüel & Kjær 对比 |
 | [07-pricing-business-model.md](./reference/07-pricing-business-model.md) | 三层定价模型、Store 30% 分成、商业护城河 |
-| [08-roadmap.md](./reference/08-roadmap.md) | 2026 H2 三波交付 + 2027 三主线 + Won't Have |
-| [09-tech-stack.md](./reference/09-tech-stack.md) | Go/React/Wails/Python/PostgreSQL/MinIO 选型理由 |
+| [08-roadmap.md](./reference/08-roadmap.md) | 已交付现状（SDK/流式/看板/常驻执行）+ 后续三主线 + Won't Have |
+| [09-tech-stack.md](./reference/09-tech-stack.md) | Go/React/Wails/Python/PostgreSQL/MinIO/GPU sidecar 选型理由 |
 | [10-deployment-modes.md](./reference/10-deployment-modes.md) | SaaS / 私有化 / 桌面单机 / 未来 Production 部署差异 |
-| [11-mcp-ai-integration.md](./reference/11-mcp-ai-integration.md) | MCP-native 是怎么回事 + Claude/Codex/Qwen CLI 接入 |
-| [12-node-ecosystem.md](./reference/12-node-ecosystem.md) | 官方节点清单 / Store 生态规划 / 开发者激励 |
+| [11-mcp-ai-integration.md](./reference/11-mcp-ai-integration.md) | MCP-native（8 模块/70+ 工具）+ SDK 通路 + Claude/Codex/Qwen CLI 接入 |
+| [12-node-ecosystem.md](./reference/12-node-ecosystem.md) | 官方节点清单（40+）/ Store 生态 / 开发者激励 |
 
 ### Scenarios（场景层）— `scenarios/`
 
@@ -79,7 +79,7 @@ user-invocable: true
 | [01-nvh-engineer-workflow.md](./scenarios/01-nvh-engineer-workflow.md) | 整车 NVH 工程师的典型工作流 |
 | [02-research-lab-usage.md](./scenarios/02-research-lab-usage.md) | 高校实验室 / 研究院教学 + 科研场景 |
 | [03-tier1-supplier-test.md](./scenarios/03-tier1-supplier-test.md) | Tier1 测试部门日常 + 报告交付 |
-| [04-online-monitoring.md](./scenarios/04-online-monitoring.md) | 风电场 / 工业泵在线监测（2027 路线） |
+| [04-online-monitoring.md](./scenarios/04-online-monitoring.md) | 风电场 / 工业泵在线监测（Production 路线图） |
 
 ### FAQ（话术层）— `faq/`
 
@@ -94,6 +94,22 @@ user-invocable: true
 | 文件 | 内容摘要 |
 |---|---|
 | [terms.md](./glossary/terms.md) | 全部术语表（DAG / blob / seat / edition / dashboard / viewer / namespace / 等等） |
+
+---
+
+## 近期新主题快速入口
+
+> 这些是平台近期的主线能力，分散在上面各 reference 文档里，常被问到，单列出入口方便定位：
+
+| 主题 | 一句话 | 入口 |
+|---|---|---|
+| **Python SDK 通路** | 外部程序调用平台已调好的分析（算法仍在平台执行）| `01-product-overview.md`、`11-mcp-ai-integration.md` |
+| **SDK 流式会话 / 实时数据流** | 持续推数据、实时取结果，适合在线 / 边采边算 | `08-roadmap.md`、`11-mcp-ai-integration.md` |
+| **常驻执行池（HotPool）** | 节点进程常驻待命，高频 / 实时调用复用热进程加速 | `04-key-concepts.md`、`08-roadmap.md` |
+| **看板（Dashboard）大扩充** | 富文本 / 图片 / HTML / 视频组件 + 批量编辑 + 整屏排版 + 快照分享 | `08-roadmap.md`、`12-node-ecosystem.md` |
+| **AutoML / 调参** | 超参搜索 + 评估闭环（向导 / 早停 / 学习曲线 / 评分节点蒸馏）| `08-roadmap.md`、`12-node-ecosystem.md` |
+| **SKU ≠ 代码 edition** | 5 个商业 SKU，但代码只有 desktop/server/saas 三个 edition | `03-edition-comparison.md` |
+| **MCP-native（8 模块 / 70+ 工具）** | AI 客户端驱动平台全流程 | `11-mcp-ai-integration.md` |
 
 ---
 

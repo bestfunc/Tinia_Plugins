@@ -10,6 +10,8 @@
 
 不是"给 Tinia 加了一个 AI 助手按钮"，是"AI 是 first-class 客户"，跟人类用户平级使用 Tinia。
 
+> **MCP 与 SDK 是两条并行通路**：MCP（本页）面向"AI 自动驾驶平台"——AI 客户端读写流程/节点/数据；Python SDK 面向"外部程序调用平台算力"——外部程序传数据、调用平台上已调好的分析拿结果。SDK 详见 `04-key-concepts.md` 的 SDK 通路 / 流式会话条目。
+
 ---
 
 ## 为什么这是护城河
@@ -25,12 +27,13 @@ HEAD ArtemiS / Siemens Testlab 基于桌面单机架构演进多年：
 
 ### Tinia 是为此设计的
 
-主仓从 v1.0 就是 web 架构（Go HTTP server + React），从 v1.20 加 MCP server 只是新增一个 endpoint：
+主仓从 v1.0 就是 web 架构（Go HTTP server + React），加 MCP server 只是新增一个 endpoint：
 
 - 复用现成的 OAuth 2.1 + PKCE + DCR 授权
 - 复用现成的权限 / 多租户体系
 - 工具调用 = HTTP API 调用 + 序列化包装
-- 总共约 600 行 Go 代码
+
+演进脉络：v1.19 AI 客户端 OAuth 授权接入（覆盖项目操作 / 文件读写 / 节点脚手架 / 编译 / 重载 / 导出）→ v1.20 新增分析流程 + 数据源操作工具，打通"开发-测试"闭环，并上线全局 AI 活动面板 + 跟随/旁观双模式 + 流程编辑器视觉联动 → v1.21 AI 一次操作完成多步（加节点 + 连线 + 改参 + 布局）失败自动回滚、插件审批安全约束（AI 只能起草、用户手动确认）→ v1.24 起 tinia-desktop 免授权直连本机。
 
 ---
 
@@ -98,41 +101,48 @@ OAuth 2.1 完整流程：
 
 实际用户感知：**第一次用某 AI 客户端时弹一次浏览器登录，之后无感**。
 
-### 工具列表（65+ tools 覆盖 7 个模块）
+### 工具列表（70+ tools 覆盖 8 个模块）
+
+代码里全 server 共注册约 72 个唯一工具，分属 8 个模块（`MCPAllModules` = `dev / nodes / graphs / data / data_write / templates / assistant / plugins`）：
 
 | 模块 | 工具数 | 代表工具 |
 |---|---|---|
-| **dev** | 20+ | dev_create_project / dev_create_node / dev_write_file / dev_reload / dev_export |
-| **data** | 5+ | datasource_list / datasource_create_composite / datasource_upload_files (deprecated) |
-| **data_write** | 1 | tinia-file-mcp upload_file_to_datasource（走 stdio 本地 MCP）|
-| **graphs** | 10+ | flow_create / flow_add_node / flow_connect / flow_run / flow_get_run_status |
+| **dev** | 25 | dev_create_project / dev_create_node / dev_write_file / dev_reload / dev_export |
 | **nodes** | 10+ | nodes_list / nodes_describe / nodes_read_source / nodes_list_types |
+| **graphs** | 20+ | flow_create / flow_add_node / flow_connect / flow_run / flow_get_run_status / flow_node_logs / flow_node_outputs |
+| **data** | 5+ | datasource_list / datasource_create_composite / channel_template_* |
+| **data_write** | 1 | tinia-file upload_file_to_datasource（走本地 MCP）|
+| **templates** | 数个 | 流程模板读写 |
+| **assistant** | 数个 | 助手类工具 |
 | **plugins** | 10+ | plugin_publish_submit / plugin_review_diff / plugin_review_approve |
-| **flow_run logs** | 5+ | flow_node_logs / flow_node_stderr / flow_node_outputs |
+
+另含 SDK 相关工具（`sdk_input` / `sdk_output` / `sdk_license` / `sdk_licenses` / `sdk_local`），用于 AI 协助生成 SDK 调用代码与管理 license。
 
 详见 `Tinia/docs/mcp-tool-reference.md`。
 
 ### 权限 / scope
 
-OAuth scope 控制工具可见性：
+OAuth scope 控制工具可见性，scope = `mcp:<module>`，共 8 个，由 user_group 的 `permissions.mcp.<module>` 决定（超管全开）：
 
 | Scope | 含义 |
 |---|---|
 | `mcp:dev` | DevStudio 项目读写 |
-| `mcp:data` | 数据源读 |
-| `mcp:data_write` | 数据源写（含上传）|
-| `mcp:graphs` | 流程读写 |
 | `mcp:nodes` | 节点定义读 |
+| `mcp:graphs` | 流程读写 |
+| `mcp:data` | 数据源读（含通道模板）|
+| `mcp:data_write` | 数据源写（含上传）|
+| `mcp:templates` | 流程模板读写 |
+| `mcp:assistant` | 助手类工具 |
 | `mcp:plugins` | 商店发布 / 审批 |
 
 用户授权时勾选 scope，AI 客户端只能用授权范围内的工具。
 
-### 双 MCP 架构（v1.22 拆分）
+### 双 MCP 架构（远程主 MCP + 本地文件 MCP）
 
 ```
 本地 AI 客户端（Claude Code / Codex / Qwen CLI）
   ├─ tinia          → Tinia Server /api/v1/mcp    远程 HTTP，OAuth + Bearer
-  │                  ~65 工具：dev / data / graphs / nodes / plugins
+  │                  70+ 工具：dev / nodes / graphs / data / data_write / templates / assistant / plugins
   │
   └─ tinia-file     → 本机 Node 进程（@bestfunc-com/tinia-file-mcp）
                       1 工具：upload_file_to_datasource
@@ -144,6 +154,10 @@ OAuth scope 控制工具可见性：
 - 主 MCP 走 JSON-RPC over HTTP，不适合 multipart 大文件上传（远程 base64 编码 + 网络往返耗时）
 - tinia-file MCP 跑在本机 Node 进程，能直接走 multipart 流式上传到 daemon
 - 鉴权用同一套 OAuth，用户无感
+
+### 免授权直连（桌面本机）
+
+装 tinia-desktop 插件后，AI 客户端连本机 Tinia 无需走 OAuth 即可使用；CLI `tinia login` 在桌面窗口内完成授权。这是桌面单机场景下的简化通路。
 
 ---
 

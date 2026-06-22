@@ -14,9 +14,13 @@
 │ 前端：React 18 / TypeScript / Vite / Tailwind            │
 │       React Flow / uPlot / ECharts / zustand            │
 │ 桌面：Wails v2（WebView2 + WKWebView）                   │
-│ 嵌入：fergusstrange/embedded-postgres / pyenv-win        │
-│ blob：MinIO（SaaS）/ 本地文件（Desktop）                  │
+│ 嵌入：fergusstrange/embedded-postgres /                  │
+│       python-build-standalone / 节点 Python SDK(go:embed)│
+│ 执行：Python subprocess + 常驻执行池(HotPool) + GPU      │
+│       共享 sidecar（internal/gpucompute，未配置则 numpy） │
+│ blob：MinIO（SaaS/Server）/ 本地文件（Desktop）           │
 │ MCP：自研 JSON-RPC 2.0 over HTTP（兼容 Anthropic 协议）  │
+│ SDK：/api/v1/sdk（License 鉴权 + UDS 直连 + 流式会话）   │
 └─────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────┐
 │ Tinia_nodes 节点仓                                        │
@@ -24,12 +28,19 @@
 │ Python 3.11 / numpy / scipy / matplotlib                 │
 │ 心理声学：mosqito                                          │
 │ 前端：每节点 React TSX（运行时 esbuild）                  │
+│ 不携带 SDK（统一用主仓 go:embed 版）                      │
 └─────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────┐
 │ Tinia_Store                                               │
 ├─────────────────────────────────────────────────────────┤
 │ Go + Gin + PostgreSQL + MinIO（跟主仓共享底座架构）       │
 │ 前端：React + Vite + Tailwind                             │
+└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│ Bestfunc_Passport（账号 + 授权控制面 / IdP）             │
+├─────────────────────────────────────────────────────────┤
+│ Go + Gin + GORM + PostgreSQL                             │
+│ OAuth / JWKS(离线验签) / userinfo / entitlement / seat   │
 └─────────────────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────────────────┐
 │ Tinia_Cli                                                  │
@@ -43,6 +54,8 @@
 │ 本地 MCP bundle：TypeScript → esbuild 成单 .js            │
 └─────────────────────────────────────────────────────────┘
 ```
+
+> 节点 Python SDK（`tinia_runtime`）的唯一事实源在主仓 `server/sdk/python/`，通过 `go:embed` 嵌进 server 二进制并在 fork 节点时注入 `PYTHONPATH`。早期"runtime 独立成 pip 包 / engine 独立成仓"的设想已归档（见 `02-architecture.md`「历史：归档的双引擎设想」），不要再写成"待抽离 / 未来独立 pip 包"。
 
 ---
 
@@ -76,6 +89,9 @@
 | `getlantern/systray` | 系统托盘 |
 | `fergusstrange/embedded-postgres` | 桌面单机版的内嵌 PostgreSQL |
 | `gorilla/websocket` | WebSocket（事件流）|
+| `go:embed` | 嵌入前端 dist / migrations / 节点 Python SDK |
+| `internal/gpucompute` | GPU sidecar / 共享 torch sidecar（节点经 IPC 复用，未 provision 时 numpy 回退） |
+| `internal/nodes/hotpool` | 常驻执行池（节点进程常驻，复用热进程加速）|
 
 ---
 
@@ -169,10 +185,16 @@ Go 语言的桌面 app 框架。把 Go binary + 前端打包成单 exe / app bun
 - venv 共享 base interpreter，仅装节点 requirements.txt 里的依赖
 - 自动从清华 PyPI 镜像加速（中国用户）
 
-### 节点跟 Go daemon 通信
+### 节点跟 server 通信
 
-- 通过 stdio JSON RPC：daemon 启 subprocess → stdin 喂任务 JSON → stdout 收事件 JSON
+- 通过 stdio JSON RPC：server 启 subprocess → stdin 喂任务 JSON → stdout 收事件 JSON
 - 数据走 HTTP API（`/api/v1/internal/blobs`）上传 / 下载 blob
+- 节点契约（端口类型 / quantity 通道语义 / 错误分级 emit_warning 等）由主仓 go:embed 的 SDK 提供
+
+### 常驻执行（HotPool）与流式
+
+- 节点进程可常驻待命（`tinia_runtime.serve()`），第二次起省 fork + import（约 530ms → 纯计算）
+- SDK 的 ChunkRuntime 给节点提供分块流式 endpoints；节点声明 `_stream_continuous` 即可维护跨窗状态，配合主仓 SDK 流式会话组成端到端实时数据流计算
 
 ---
 
@@ -187,6 +209,8 @@ Go 语言的桌面 app 框架。把 Go binary + 前端打包成单 exe / app bun
 | 数据源 / 凭据 | datasources / credentials |
 | 节点 / 商店订阅 | plugins / subscriptions / approvals |
 | 多租户底座 | namespaces / activations / seats |
+| SDK 通路 | sdk_licenses（SDK 凭据 + 调用记录）|
+| MCP 审计 | mcp_audit_logs |
 
 **Migration 工具**：自研，按版本号顺序执行 `server/migrations/*.sql`。
 
@@ -215,15 +239,37 @@ Go 语言的桌面 app 框架。把 Go binary + 前端打包成单 exe / app bun
 ### 鉴权
 
 - OAuth 2.1 + PKCE + 动态客户端注册（DCR）+ loopback
-- 首次授权一键 OAuth，token 缓存到 client 本地
-- 不需要手动管 API key
+- 首次授权一键 OAuth，token 缓存到 client 本地；scope 由 user_group `permissions.mcp.<module>` 决定，超管全开
+- 不需要手动管 API key；审计落 `mcp_audit_logs`
 
 ### Tools 数量
 
-- 当前 ~65 个 tool 覆盖 7 个模块：dev / data / graphs / nodes / plugins / etc
-- 模块分组通过 OAuth scope 管理
+- 当前 70+ 个 tool（含约 25 个 `dev_*`），覆盖 **8 个模块**：`dev / nodes / graphs / data / data_write / templates / assistant / plugins`
+- 每个模块对应一个 scope `mcp:<module>`（共 8 个 scope），模块分组通过 OAuth scope 管理
+- 工具覆盖项目操作 / 文件读写 / 节点脚手架 / 编译 / 重载 / 导出 / 分析流程 / 数据源 / 通道模板 / SDK 管理等
 
 详见 `11-mcp-ai-integration.md`、`Tinia/docs/mcp-spec.md`。
+
+---
+
+## SDK（外部程序调用）
+
+### 协议与鉴权
+
+- 入口：`/api/v1/sdk`，Python 客户端 `tinia_sdk`（`server/sdk/client-python/`）
+- 鉴权：**License（不是 api_key）**。凭据打包进 SDK 包里的 `license.json`（`license_id` + `secret`），请求头 `Bearer <license_id>.<secret>`；server 端 `internal/sdkapi/middleware.go LicenseAuth` 查 `sdk_licenses` 表校验
+- `connect(server_url=None, license_path=None, socket_path=None, use_uds=None)`；缺省 server_url 取 `license.json` 内地址；**同机可走 Unix domain socket（UDS）直连 + 路径直传**，大文件显著更快
+- **没有第二个引擎**：SDK 只上传 raw bytes + 调用 + 下载，执行永远在 tinia-server 进程内
+
+### 流式会话
+
+- `internal/sdkapi/stream.go`：JWT `session_token` 门控 push / recv / close / keepalive，可持续推数据、实时取回结果；实时直调跳过缓存、走内存中转，配合常驻执行池更快
+
+### SDK 调用分析
+
+- 超管可查看每个 SDK 的调用量、成功率、耗时、Top 节点、最近失败
+
+详见 `Tinia/docs/sdk-design.md`。
 
 ---
 
@@ -240,6 +286,16 @@ Go 语言的桌面 app 框架。把 Go binary + 前端打包成单 exe / app bun
 - 独立部署 / 独立运维 / 平台级演进
 - 商店是平台级服务，跟具体 Tinia 实例解耦
 - 多个 Tinia 实例（不同公司 / 不同 edition）共享一个商店
+
+> **Store 与 Passport 分工**：Store 负责节点 catalog / 发布审批 / 订阅 / 商业分成 / 实例激活（`store_url`）；身份 / OAuth / JWKS / entitlement / seat 正逐步由独立的 **Bestfunc_Passport** 承担（bestfunc 全产品的账号 + 授权控制面，Tinia 为接入方之一，dev 端口 18725/18726）。
+
+---
+
+## Passport：Bestfunc_Passport（身份 / 授权控制面）
+
+- Go + Gin + GORM + PostgreSQL，独立库 `bestfunc_passport`
+- 对外提供 OAuth / JWKS（离线验签）/ userinfo / entitlement / seat
+- Tinia 侧 `server/internal/auth/sso.go` 等接入；定位为 bestfunc 全产品复用的身份提供方（IdP），不是 Tinia 专属
 
 ---
 
