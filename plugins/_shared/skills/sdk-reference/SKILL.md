@@ -1,56 +1,101 @@
 ---
 name: sdk-reference
 display_name: Tinia SDK 参考
-description: tinia_runtime.Runtime 所有方法的完整参考 —— run.py 里必须用的 API
+description: tinia_runtime（Runtime / ChunkRuntime）完整 API 参考 —— 节点 run.py 必用；附 tinia_sdk（外部程序调用平台）速查
 user-invocable: false
 ---
 
-# Tinia SDK 参考（`tinia_runtime.Runtime`）
+# Tinia SDK 参考（`tinia_runtime`）
 
-所有 Python 节点的 `run.py` 都长这样：
+> **本 skill 讲的是节点内 `run.py` 用的 `tinia_runtime`。**
+> 如果你要写的是**外部 Python 程序调用 Tinia 平台**（把数据喂给平台上调好的节点/流程、拿回结果，或开实时流式会话），那是另一条线 `tinia_sdk`（`connect()` / `run_node` / `open_stream` …）—— 见文末「另一条线：`tinia_sdk`」一节。两者不要混。
+
+## 两个 Runtime 入口（V2 流式架构）
+
+`tinia_runtime` 提供两个入口，节点按自己的 manifest 选一个，**入口选错会立即报错**：
+
+| 入口 | 何时用 | 读输入 | 写输出 |
+|------|--------|--------|--------|
+| `Runtime` | 默认 batch；不声明 streaming 的简单节点 | `fetch_blob(handle)` 一次性拉 | `upload_blob` + `emit_output` |
+| `ChunkRuntime` | **新分析/处理节点推荐**；manifest 声明 `streaming.can_stream_downstream=true` 的节点必用 | `iter_input(port)` 边收 chunks 边 yield | `open_output(port).write_item()` + `close()` |
+
+`ChunkRuntime` 是 `Runtime` 的子类：基础 API（fetch_blob / upload_blob / emit_* / extract_provenance / pick_device …）全继承，只多了 `iter_input` / `open_output` 这套流式 I/O。**新写节点优先用 `ChunkRuntime`** —— 即便下游不 streaming，它也会退化成等价 V1 行为（一次性拉 final blob、close 时一次性上传），节点代码一份通吃，没有 streaming 损失。
+
+### ChunkRuntime 标准模板（与 create-node skill 一致）
 
 ```python
 import json
-from tinia_runtime import Runtime
+from tinia_runtime import ChunkRuntime
 
-rt = Runtime.from_stdin()
-rt.emit_progress(0, "开始")
+def main():
+    rt = ChunkRuntime.from_stdin()
+    p = rt.task.get("params") or {}
 
-# ... 业务逻辑 ...
+    # 打开输出端口（header 放所有 item 共享的元数据）
+    out = rt.open_output("result", header={"indicator": "...", "unit": "dB"},
+                         node_type="Any", inherit_total_from="data")
 
-rt.emit_output("result", handle)
-rt.emit_done()
+    idx = 0
+    for items_chunk in rt.iter_input("data"):      # 边收边处理
+        for item in items_chunk:
+            out.write_item(process(item))          # 边产边写
+            idx += 1
+            total = rt.upstream_total("data")
+            rt.emit_progress(min(idx / total, 1.0) if total else 0,
+                             f"{idx}/{total} 项" if total else f"已处理 {idx} 项")
+
+    out.close()        # flush + 上传完整 final blob + emit_output（V2 时同时 fan-out done）
+    rt.emit_done()
+
+if __name__ == "__main__":
+    main()
 ```
 
-Runtime 由 Tinia 的 Python runner 注入 stdin（JSON 任务协议）+ 签发临时 API token 供插件节点调 Tinia 内部 API 用。
+Runtime 由 Tinia 的 Python runner 注入 stdin（JSON 任务协议）+ 临时 token，供节点拉/推 blob、调 Tinia 内部端点用。
 
-## 基础 API
+### 常驻执行池 / serve 模式对节点作者透明
 
-### `Runtime.from_stdin() -> Runtime`
+平台有「常驻执行池（HotPool）」让 worker 进程常驻、省掉每次 fork+import numpy/scipy 的开销。**这对节点作者完全透明：你不需要写任何 serve 适配代码。**
 
-从 stdin 读任务 JSON 并构造 Runtime。**入口必调**。
+- ✅ 保持标准写法即可：
+  ```python
+  if __name__ == "__main__":
+      main()
+  ```
+- ❌ **不要**再写 `if os.environ.get("TINIA_SERVE")=="1": serve(main) else: main()` —— 这种历史写法**已废弃**。常驻池由平台的 `_serve_launcher.py` 透明驱动（它按路径 import 节点模块、取 `main()` 交给内部 `serve()` 循环），那时 `__name__ != "__main__"`，那段分支本来也不会执行，写不写都一样。
 
-任务 JSON 结构：
+`from_stdin()` 每个 task 重新解析 stdin（凭据/token 不跨 task 残留），所以同一份 `main()` 既能一次性执行，也能进池循环，零额外代码。
+
+## 基础 API（`Runtime` / `ChunkRuntime` 共有）
+
+### `Runtime.from_stdin()` / `ChunkRuntime.from_stdin()`
+
+从 stdin 读任务 JSON 并构造 Runtime。**入口必调**。按节点是否 streaming 选对应的类。
+
+任务 JSON 结构（节选）：
 ```json
 {
   "graph_run_id": 123,
   "node_id": "n5",
   "node_type": "bestfunc/level_meter",
+  "mode": "v1",
   "inputs": {
-    "data": {"uri": "s3://bucket/xxx", "hash": "...", "type": "ProcessedDataset", "size": 1234567}
+    "data": {"uri": "minio://bucket/blobs/xx/HASH", "hash": "...", "type": "ProcessedDataset", "size": 1234567}
   },
   "params": {"threshold": 65, "weighting": "A"},
-  "api_token": "短期 JWT",
-  "server_url": "https://tinia..."
+  "fetch_token": "短期 token",
+  "fetch_url": "...", "upload_url": "..."
 }
 ```
 
 ### `rt.task: dict`
 
 原始任务字典。最常用：
-- `rt.task["inputs"][port_key]` → 上游输入的 Handle
+- `rt.task["inputs"][port_key]` → 上游输入的 Handle（dict）
 - `rt.task["params"]` → 用户配置的参数（对应 params.schema.json）
 - `rt.task["node_id"]` / `rt.task["graph_run_id"]`
+
+> `Runtime` 的低层字段是 `rt.token`（= task 的 `fetch_token`）/ `rt.fetch_url` / `rt.upload_url`，由 SDK 内部用，节点一般不直接碰。
 
 ## Blob 读写
 
@@ -89,98 +134,101 @@ for item in ds["items"]:
     # ... 用 audio / sr 做你的分析
 ```
 
-**手动**：item 里有 `local_uri` 字段时按 handle dict 拼好后传 fetch_blob：
+**手动**：item 里有 `local_uri` 字段时按 handle dict 拼好后传 fetch_blob（`fetch_blob` 会从 uri 末段提取 hash，所以 hash 缺省也能用）：
 
 ```python
 for item in ds["items"]:
     handle = {"uri": item["local_uri"], "hash": item.get("hash", ""),
-              "size": item.get("size", 0), "mime": "audio/wav"}
+              "size": item.get("size", 0)}
     audio_bytes = rt.fetch_blob(handle)
 ```
 
 > 写新音频分析节点时**优先 `AudioInput.iter_channels`**（多通道感知）；只关心混合信号或纯单声道场景才用 `load_audio`。两者都比手写 fetch + scipy.io.wavfile 解码安全。
 
-### `rt.upload_blob(data: bytes, mime: str = "application/octet-stream") -> dict`
+### `rt.upload_blob(data, node_type="", content_type="application/octet-stream") -> dict`
 
-上传 bytes 到 blob store，返回新 handle（含 uri / hash / size / mime）。
+上传 bytes 到 blob store，返回新 handle（含 uri / hash / size 等）。
+
+⚠ **签名注意：第二个位置参数是 `node_type`，不是 mime。** mime 在第三参 `content_type`，**务必关键字传**：
 
 ```python
 import json
-out = {"type": "IndicatorData", "indicators": [{"name": "SPL_A", "value": 72.5, "unit": "dBA"}]}
-handle = rt.upload_blob(json.dumps(out).encode(), "application/json")
+out = {"indicators": [{"name": "SPL_A", "value": 72.5, "unit": "dBA"}]}
+
+# ✅ 正确：node_type 走第二位，mime 用关键字 content_type=
+handle = rt.upload_blob(json.dumps(out).encode(), node_type="IndicatorData",
+                        content_type="application/json")
 rt.emit_output("result", handle)
+
+# ❌ 错误：把 mime 当第二位置参数 —— 它会被当成 node_type，前端类型识别全乱
+handle = rt.upload_blob(json.dumps(out).encode(), "application/json")
 ```
 
-⚠ **小数据 ≤ 1 万 item 才用这个**。大数据集（10 万+ items）必须用下面的 `emit_streaming`，
-否则 `json.dumps(...).encode()` 单次序列化会让内存翻倍 OOM。
+- `node_type`：输出端口的数据类型（IndicatorData / FeatureMatrix / ProcessedDataset / Any …），写进 blob 的 X-Type 头供前端 viewer + 类型校验用。
+- `content_type`：HTTP MIME（绝大多数情况是 `application/json`）。
 
-### `rt.emit_streaming(port, header, node_type, schema=None)` —— **大数据集必用**（v1.28+）
+> **`Runtime`（batch 节点）**用 `upload_blob` + `emit_output` 一次性出结果。
+> **`ChunkRuntime`（流式节点）**不直接调 upload_blob —— 用 `open_output().write_item()` + `close()`，由 `ChunkEmitter` 在 close 时内部调 `upload_blob(..., node_type=...)` 上传完整 final blob。下面是流式 I/O 详解。
 
-JSONL 格式 emit：首行写 header，每行写一个 item，自动管理临时文件 + 上传。
-避免 `results.append(...) + json.dumps(...)` 累积模式的内存翻倍。
+## 流式 I/O（`ChunkRuntime`）—— 新节点首选
+
+### `rt.iter_input(port) -> Iterator[list[dict]]`
+
+流式读上游 port，**一段一段** yield `list[dict]`（一个 chunk 的 items）。无论 server 是 V1 还是 V2 调度，**节点代码同一份**：
 
 ```python
-# 推荐用法：open() + try/finally
-out = rt.emit_streaming("result", header={
-    "indicator": "octave_A",
-    "unit": "dB",
-    "fraction": 3,
-}, node_type="Any").open()
-try:
-    for item in items:
-        ...
-        out.write_item({
+for items_chunk in rt.iter_input("data"):
+    for item in items_chunk:
+        out.write_item(process(item))
+```
+
+- V1 调度 / 该 port 不在 streaming 链路上：内部 `fetch_blob` 拉完整 final blob，整段当 1 个 chunk yield（等价老 `json.loads(fetch_blob)`）。
+- V2 调度 + 该 port 是 streaming 输入：long-poll chunks 端点，上游边推边收。
+- 上游失败 → 抛 `UpstreamFailedError`；上游 done → 正常结束循环。
+- 没有该输入 → 空迭代（不报错）。
+
+> 它会自动适配 `items` / `rows` 两种顶层字段（FeatureMatrix 用 rows，其余用 items），节点不用自己判断。
+
+### `rt.upstream_total(port) -> int`
+
+拿上游某 port 的预期总 item 数，给进度条当分母。**要在 `iter_input` 拿到第一个 chunk 之后才有值**（未知时返回 0，节点应显示「已处理 N 项」无分母）：
+
+```python
+total = rt.upstream_total("data")
+rt.emit_progress(min(idx / total, 1.0) if total else 0,
+                 f"{idx}/{total} 项" if total else f"已处理 {idx} 项")
+```
+
+### `rt.open_output(port, header=None, node_type="Any", inherit_total_from=None) -> ChunkEmitter`
+
+打开输出端口，拿到一个 `ChunkEmitter`。节点用 `write_item` 一行行写，`close` 时上传完整 final blob。
+
+- `header`：放所有 items 共享的元数据（indicator / unit / fraction …），不在 per-item 里重复。`total` 字段由 SDK 在 close 时自动回填。
+- `node_type`：输出类型；FeatureMatrix 时 final blob 顶层字段是 `rows`，其余是 `items`（SDK 自动选，与 FeatureBuilder.build() / 主仓 Go 端一致）。
+- `inherit_total_from`：1:1 节点便利 —— 第一个 chunk push 时自动用 `upstream_total(该 port)` 当本端口预期 total，下游进度条就有分母。非 1:1 节点别用（要么处理完调 `set_total(n)`，要么不调）。
+
+### `ChunkEmitter` 方法
+
+```python
+out = rt.open_output("result", header={"indicator": "octave_A", "unit": "dB", "fraction": 3},
+                     node_type="Any", inherit_total_from="data")
+for items_chunk in rt.iter_input("data"):
+    for item in items_chunk:
+        out.write_item({                       # 累积进 final blob；V2 时攒满 chunk_size 自动 push 下游
             "item_id": ch.label,
             "value": value,
             "vs_freq": {"freqs": valid_centers, "values": [...]},
         })
-finally:
-    out.close()    # 正常完成 → 上传；异常时也清理临时文件
-
-# 等价 context manager 写法（节点 indent 会多一层，多数情况推荐上面那种）
-with rt.emit_streaming("result", header={...}, node_type="Any") as out:
-    for item in items:
-        out.write_item({...})
+out.close()        # flush 末段 chunk + 上传完整 final blob + emit_output("result", handle)
 ```
 
-**header 规范**：放所有 items 共享的元数据（indicator / unit / fraction / etc），
-不在 per-item 里重复。`total` 字段由 SDK 自动回填，不用自己写。
+- `out.write_item(item)`：写一个 item。永远累积到 final blob；V2 streaming 输出端口同时攒到 `chunk_size` 自动 push 给下游。
+- `out.set_total(n)`：声明本端口预期总 item 数（**必须在第一次 write_item 之前**调）。
+- `out.flush_chunk()`：按业务边界手动 flush 当前 buffer（可选）。
+- `out.close()`：flush 末段 + 上传完整 final blob（内部走 `upload_blob(..., node_type=...)`）+ `emit_output`。**每个 open 的端口必须 close**。
+- 支持 `with rt.open_output(...) as out:` —— 正常退出自动 close；异常时（V2）通知 server 该端口上游失败，让下游 raise。
 
-**schema 参数**：可选，注入到 handle.schema 给前端 viewer 用（如 `{"item_count": 100}`）。
-
-### `rt.read_dataset(handle) -> (header, items_iter)` —— **新节点首选**（v1.28+）
-
-自动检测 jsonl / 老 json 双格式，返回 (header dict, items iterator)。
-**消费 LS3 改造后的声学节点输出必须用这个**（老 `json.loads(fetch_blob)` 解析 jsonl 会失败）。
-
-```python
-# 节点输入：data 端口
-input_handle = rt.task["inputs"]["data"]
-header, items_iter = rt.read_dataset(input_handle)
-
-# header 拿共享元数据（如 unit / indicator / freqs）
-shared_unit = header.get("unit")
-total = int(header.get("total") or 0)
-
-# items_iter 是 generator，惰性解析
-for item in items_iter:
-    process(item)
-
-# 老代码兼容（业务逻辑需要 list 时）
-items = list(items_iter)
-ds = {**header, "items": items}      # 跟老 json.loads 结果同结构
-```
-
-### `rt.read_streaming(handle) -> (header, items_iter)` —— 显式 jsonl
-
-跟 `read_dataset` 类似但**不做格式探测**（默认假设 handle 是 jsonl）。
-推荐用 `read_dataset`（兼容性更好）。
-
-### `rt.fetch_content_url(url: str) -> bytes`
-
-直接从 URL 下载（不走 blob store hash 校验）。**只有 item 里真有 `content_url` 字段时才用** ——
-当前 dataset/materialize 节点的 item 主要给 `local_uri` 字段，应优先用 `tinia_audio.load_audio` 或
-拼 handle 走 `fetch_blob`。`fetch_content_url` 主要给老插件 / 外部 URL 场景用。
+> final blob 的字节跟 V1 节点 `json.dumps({...header, "items":[...], "total":N})` **完全一致** —— V1/V2 cache_key 互通。chunks 只是链路加速副产物，不入库、不改输出语义。
 
 ### `tinia_audio` helper（老 API — 单声道场景）
 
@@ -273,26 +321,28 @@ fb = FeatureBuilder(
     labels=FEATURE_LABELS,                     # 必传，否则 chart_viewer 显示英文 key
     direction={"value": "low", "vs_time_max": "low"},  # 可选，异常检测节点用
 )
-for src_item in items:
-    for ch in AudioInput.iter_channels(rt, src_item):
-        features = {
-            "value": compute_loudness(ch.samples, ch.sr),
-            **stats_from_series(vs_time, prefix="vs_time_"),
-        }
-        fb.add(
-            source_item_id=src_item["item_id"],
-            channel_label=ch.channel_short,     # ⚠️ 必须 channel_short，不能用 ch.label
-            features=features,
-            provenance=Runtime.extract_provenance(src_item),
-            name=src_item.get("name"),
-        )
-# ⚠ 大数据集（10 万+ items）必用 build_streaming（v1.28+），避免 json.dumps(fb.build()) 内存翻倍
-fb.build_streaming(rt, "features", node_type="FeatureMatrix")
+for items_chunk in rt.iter_input("data"):
+    for src_item in items_chunk:
+        for ch in AudioInput.iter_channels(rt, src_item):
+            features = {
+                "value": compute_loudness(ch.samples, ch.sr),
+                **stats_from_series(vs_time, prefix="vs_time_"),
+            }
+            fb.add(
+                source_item_id=src_item["item_id"],
+                channel_label=ch.channel_short,     # ⚠️ 必须 channel_short，不能用 ch.label
+                features=features,
+                provenance=Runtime.extract_provenance(src_item),
+                name=src_item.get("name"),
+            )
 
-# 老 API（小数据集 / 兼容场景仍可用）
-# h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
-# rt.emit_output("features", h)
+# fb 内部已做完聚合，一次性上传。features 端口流式化收益有限，
+# 走 upload_blob + emit_output（node_type 用 FeatureMatrix）即可。
+h = rt.upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")
+rt.emit_output("features", h)
 ```
+
+> `FeatureBuilder` **没有** `build_streaming` 方法 —— 它只有 `add()` 和 `build()`。features 端口的输出是 `upload_blob(json.dumps(fb.build()).encode(), node_type="FeatureMatrix")` + `emit_output("features", h)`。即便节点主输出端口用 `ChunkRuntime` 流式，features 端口仍这么写（见 level_meter run.py 实例）。
 
 **铁律 — `channel_label` 必须用 `ch.channel_short`**：
 - `ch.channel_short`：单通道返回 `""`，多通道返回 `"ch0"` / `"ch1"` —— 这才是设计意图
@@ -385,22 +435,75 @@ except Exception as e:
 
 直接抛异常也会被 runner 捕获，但**建议显式 `emit_error`**，错误信息才会显示在 Web UI 上。
 
-## 可选：调 Tinia 内部 API
+## GPU helper（manifest 声明 `gpu` 的节点用）
 
-### 数据源插件节点需要访问自己的凭证时
+- `rt.pick_device(prefer="auto") -> str`：自动探测返回 `"cuda"` / `"mps"` / `"cpu"`（CUDA → Apple MPS → CPU；无 torch 直接 cpu）。会自己 emit_log 报告选中 device，节点不必再打日志。`prefer="cpu"` 强制 CPU。
+- `rt.require_gpu(prefer="auto") -> str`：`gpu: required` 节点用 —— 拿不到 GPU 直接抛清晰中文 `ConfigError` 终止。
+- `rt.gpu_call(kernel, params, timeout=180.0) -> dict | None`：调 daemon 的共享 GPU sidecar（torch 集中在 sidecar，节点自身 venv 不装 torch）。sidecar 未就绪/出错统一返回 `None`，让调用方本地 CPU 回退（绝不抛错中断节点）。
 
-通过 `rt.api_token`（短期 JWT）+ `rt.server_url` 访问：
-- `POST {server_url}/api/v1/plugin-db/query` — 查插件自己的表
-- 其他 Tinia API（按需）
+## 数据源凭据（数据源插件节点用）
 
-插件数据源（`datasource_plugin` 模板）用这个机制存自己的凭证和数据源配置。
+### `rt.get_datasource() -> dict | None`
+
+节点参数含 `datasource_id` 时，Go 端自动查 DB 解密凭据注入到 task。节点用这个方法拿到：
+
+```python
+ds = rt.get_datasource()
+if ds:
+    cred = ds["credential"]      # {"host": ..., "project": ..., "client_id": ..., "client_secret": ...}
+    cfg = ds["config"]           # 数据源配置（如 default_directory）
+```
+
+返回结构含 `id` / `name` / `type` / `config` / `credential_type` / `credential`；节点没有 datasource_id 参数时返回 `None`。**这就是数据源插件访问自己凭据的唯一机制 —— 没有 `rt.api_token` / `rt.server_url` / `plugin-db/query` 这些东西**（历史文档里有，已不存在）。
 
 ## 常见坑
 
 1. **忘记 emit_done** → 节点永远 running
-2. **emit_output 的 port_key 和 node.yaml 不一致** → 下游连不到
+2. **emit_output 的 port_key 和 node.yaml 不一致** → 下游连不到（`ChunkRuntime` 用 `open_output(port)` 的 port 同理）
 3. **handle 和 bytes 混用** → `fetch_blob(handle)` 要传 **handle dict**（来自 `rt.task["inputs"][port]` 或 `rt.upload_blob` 返回值）；不要传 `item["local_uri"]` 这种裸 string
-4. **音频处理别自己解码** → 用 `tinia_audio.load_audio(rt, item)` 一行搞定 fetch+WAV 解码；自己写 fetch_blob + scipy.io.wavfile.read 容易踩 local_uri vs content_url 兼容性坑
-5. **改了 requirements.txt 别只 dev_reload 一次** → reload 会自动检测 mtime 重装；但首次跑节点才触发 Prepare，要么测试节点跑一次让它装完，要么观察 server log 出现 `[python-runner] pip install for ...` 才算装完
-6. **stdin 不要乱 print** → 所有 stdout 输出必须是 runner 约定格式的 JSON 事件；调试信息用 `emit_log` 或 stderr
-7. **大数据别全塞 handle 的 JSON** → items 里引用 `blob_uri` / `local_uri`，真实字节存 blob store
+4. **upload_blob 第二参是 node_type 不是 mime** → mime 必须关键字传 `content_type=`
+5. **音频处理别自己解码** → 用 `AudioInput.iter_channels` 或 `tinia_audio.load_audio(rt, item)`；自己写 fetch_blob + scipy.io.wavfile.read 容易踩 local_uri 兼容性坑
+6. **别写 serve 适配代码** → 保持 `if __name__=="__main__": main()`；常驻池透明接管，`if TINIA_SERVE==1: serve(main)` 已废弃
+7. **stdin 不要乱 print** → 所有 stdout 输出必须是 runner 约定格式的 JSON 事件；调试信息用 `emit_log` 或 stderr
+8. **大数据别全塞 handle 的 JSON** → 用 `ChunkRuntime`（`iter_input` + `open_output().write_item()`）边收边写边产，避免 `results.append(...) + json.dumps(...)` 累积模式的内存翻倍
+
+---
+
+## 另一条线：`tinia_sdk`（外部程序调用平台）
+
+> ⚠ 上面整篇讲的 `tinia_runtime` 是**节点内 `run.py`** 用的。如果你写的是**外部 Python 程序**，要把数据交给 Tinia server 上已调好的节点/流程执行、同步拿回结果，用的是**另一个包 `tinia_sdk`**，API 完全不同。
+
+`tinia_sdk` 从平台「SDK 管理」生成，授权凭据 + server 地址打包在内，零配置：
+
+```python
+import tinia_sdk
+tinia = tinia_sdk.connect()                          # 地址/凭据自动读取
+
+# 跑单个节点（数据支持 文件路径 / numpy 数组 / 已上传句柄）
+result = tinia.run_node("bestfunc/time_stats", "test.wav", params={"frame_ms": 0})
+print(result.json("result"))
+
+# 用平台「复制参数」拿到的 TNP1 预设串跑（串里自带节点类型）
+result = tinia.run_preset("TNP1:eyJ0eXBlIjoi...", "test.wav")
+
+# 跑整个流程（流程里放一个「API 输入」+ 一个「API 输出」节点）
+result = tinia.run_flow(graph_id=12, input=data)
+```
+
+主要 API：`connect()` / `TiniaClient.run_node` / `run_preset` / `run_flow` / `upload` / `upload_signal`。
+
+### 流式会话（实时数据流，v1.35）—— 只在 `tinia_sdk` 这侧
+
+```python
+with tinia.open_stream(graph_id=1, sr=51200) as s:
+    s.push(frame_array)                 # 推一帧/一窗（numpy 1D 单通道 / 2D 通道×采样点），返回帧序号
+    for res in s.recv_iter():           # 持续 yield 结果 item 直到会话收尾
+        dba = res.get("dba")
+# 离开 with 自动 close；也可手动 s.recv(timeout=30) -> (items, done) / s.close() / s.keepalive()
+```
+
+`StreamSession`（由 `open_stream` 创建）：`push` / `recv` / `recv_iter` / `close` / `keepalive`。内部 long-poll + token 临近过期自动续签，适配 7×24 长会话。
+
+> **流式会话是「外部喂实时数据流给平台流程」的能力，属于 `tinia_sdk`。** 节点内 `run.py` 的 `ChunkRuntime` 流式 I/O（`iter_input` / `open_output`）是平台内部链路加速，**两者不是一回事，不要混淆**。节点要参与流式会话只需保持标准写法（如 level_meter 用 `params["_stream_continuous"]` 跨窗延续状态），平台透明驱动。
+
+**去哪查 `tinia_sdk` 细节**：`Tinia/server/sdk/client-python/`（`README.md` + `tinia_sdk/client.py`）。异常类型：`NodeError` / `LicenseRevokedError` / `AuthError` / `TiniaTimeoutError` / `TiniaError`。

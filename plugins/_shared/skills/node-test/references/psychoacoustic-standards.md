@@ -7,7 +7,7 @@
 
 Tinia 信号默认归一化到 `[-1, +1]`。心理声学算法需要知道"满量程对应多少 dB SPL"。
 
-**v1.11+ 推荐方式（首选）**：在 `signal_generator` 上配 `channel_calibration_db`，校准跟着数据流走，所有下游分析节点（loudness / sharpness / level_meter / tonality）自动用这个值（**优先于节点自身的 calibration_db params**）：
+**推荐方式（首选）**：在 `signal_generator` 上配 `channel_calibration_db`，校准跟着数据流走，所有下游分析节点（loudness / sharpness / level_meter / tonality）自动用这个值（**优先于节点自身的 calibration_db params**）：
 
 ```
 signal_generator (sine 1k, amp=0.063, channel_calibration_db="94")

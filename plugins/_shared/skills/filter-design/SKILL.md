@@ -19,11 +19,12 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 ## 三个滤波节点（决策树）
 
 ```
-┌─ 用户要做的事 ────────────┐    ┌─ 选哪个节点 ─────────────────────┐
-│ 通用过滤（lp/hp/bp/bs）   │ →  │ iir_filter（默认推荐 ⭐）         │
-│ 严格线性相位需求          │ →  │ fir_filter                       │
-│ A/C/Z 计权（声学）        │ →  │ weighting_filter                 │
-└──────────────────────────┘    └──────────────────────────────────┘
+┌─ 用户要做的事 ──────────────────┐    ┌─ 选哪个节点 ─────────────────────┐
+│ 通用过滤（lp/hp/bp/bs）         │ →  │ iir_filter（默认推荐 ⭐）         │
+│ 严格线性相位需求                │ →  │ fir_filter                       │
+│ A/C/Z 声学计权（声压级）        │ →  │ weighting_filter                 │
+│ Wk/Wd/Wh 人体振动计权（加速度） │ →  │ weighting_filter                 │
+└────────────────────────────────┘    └──────────────────────────────────┘
 ```
 
 ### iir_filter（首选 — 90% 滤波场景）
@@ -58,9 +59,17 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 > **默认勾选 `compensate_delay`**：FIR 自带 (taps-1)/2 群延迟，补偿后输出时间戳跟输入对齐。**关闭它仅当下游节点要求严格因果性**（罕见）。
 
-### weighting_filter（声学专属）
+### weighting_filter（频率计权 — 声学 + 人体振动）
 
-IEC 61672 标准 A / C / Z / B 计权。**几乎只在声学评价流水线里用**。
+`category=preprocess`。**已吸收旧 `iso_weighting` 节点**（如果用户/旧流程提到 iso_weighting，统一改用本节点）。两类计权共用一个 `weighting` 枚举：
+
+- **声学计权（IEC 61672，输入为声压信号）**：A / C / Z / B
+- **人体振动计权（ISO 8041 传递函数，输入应为加速度信号）**：WK / WD / WH
+
+> ⚠️ **端口名是 `audio`**（不是 `data`）：required 输入 key = `audio`（type=AudioData），输出 key = `processed`（type=ProcessedDataset）。连线时务必用 `audio` 端口，否则 connect 失败。
+> 多通道时**逐通道独立计权**（n 进 n 出），不再静默平均。
+
+#### 声学计权（声压级链路）
 
 | 场景 | 推荐参数 |
 |---|---|
@@ -70,6 +79,17 @@ IEC 61672 标准 A / C / Z / B 计权。**几乎只在声学评价流水线里�
 | 复测旧数据（IEC 已淘汰）| `weighting=B`（仅向后兼容）|
 
 > sr ≥ 48 kHz 时 8 kHz 内是 IEC Class 1；关注 16 kHz 内容请用 sr ≥ 96 kHz。
+
+#### 人体振动计权（ISO 8041，输入须为加速度信号）
+
+| 场景 | 推荐参数 |
+|---|---|
+| 全身振动·垂直方向（座椅 Z 向），车辆/船舶/建筑乘坐舒适性，ISO 2631-1 | `weighting=WK`（敏感区约 4~12 Hz）|
+| 全身振动·水平方向（X/Y 向），与 Wk 配对评价座椅 | `weighting=WD`（敏感区约 0.5~2 Hz）|
+| 手传振动（手柄/工具），手持电动工具职业暴露，ISO 5349-1 | `weighting=WH`（敏感区约 8~16 Hz）|
+
+> **振动计权的输入/输出都是加速度**（只改频率权重，不换量纲）。要得到 ISO 评价量（如 a_w 加权 RMS）：`weighting_filter (WK/WD/WH)` → 下游接"时域统计"取有效值（RMS）。
+> 输入若是声压而非加速度，振动计权结果无物理意义 —— 选 WK/WD/WH 前先确认数据源是振动/加速度。
 
 ## 标准 NVH 流水线（推荐起手式）
 
@@ -152,6 +172,9 @@ IIR + 要保留波形形状（最线性相位）→ Bessel。
 | "做个 A 计权" | `weighting_filter`（A） |
 | "保留语音频段" | `iir_filter`（bp 300-3400Hz butter 4） |
 | "我想测 dBA" | `weighting_filter`（A）→ `level_meter` |
+| "全身振动/座椅振动评价" | `weighting_filter`（WK 垂直 / WD 水平）→ 时域统计取 RMS（ISO 2631-1）|
+| "手持工具/手传振动评价" | `weighting_filter`（WH）→ 时域统计取 RMS（ISO 5349-1）|
+| "做个 Wk/Wd/Wh 计权" | `weighting_filter`（WK/WD/WH，输入须为加速度信号）|
 | "相位不能变" | `fir_filter` 或 `iir_filter + zero_phase=true` |
 | "提取共振峰" | `iir_filter`（窄带 bp，比如 cutoff_low=900 cutoff_high=1100） |
 | "分析前先滤掉直流" | `iir_filter`（hp 1-5Hz butter 2） |
@@ -207,6 +230,8 @@ signal_generator (impulse, amp=1.0) → <被测滤波节点> → fft_spectrum
 - **zero_phase=true + impulse stimulus 测频响** → filtfilt 镜像 padding 让 impulse 在两端各出一个伪冲激，频谱失真。改用 chirp / white_noise PSD 平均法（详见"测试与验证"章节的"严重坑"）
 - **FIR taps > 信号长度** → 跳过该 item，要么减小 taps 要么用更长信号
 - **B 计权（已淘汰）** → 提醒用户 IEC 61672 已弃用，除非复测旧数据否则用 A 或 C
+- **选了 WK/WD/WH 但数据源是声压而非加速度** → 振动计权结果无物理意义，先确认数据是振动/加速度信号
+- **weighting_filter 连线用错端口** → 输入端口名是 `audio`（不是 `data`），用错会 connect 失败
 
 ## 与其他 skill 的关系
 
