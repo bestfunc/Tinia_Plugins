@@ -14035,8 +14035,10 @@ ${err.stack ?? ""}` : String(err);
 }
 
 // src/oauth.ts
-var REQUIRED_SCOPES = ["mcp:data", "mcp:data_write"];
-var SCOPE_STRING = REQUIRED_SCOPES.join(" ");
+var REQUESTED_SCOPES = ["mcp:data", "mcp:data_write"];
+var MIN_SCOPES = ["mcp:data"];
+var SCOPE_STRING = REQUESTED_SCOPES.join(" ");
+var SCOPE_DATA_WRITE = "mcp:data_write";
 function base64UrlEncode(buf) {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -14216,7 +14218,7 @@ async function ensureToken(cfg) {
     }
     log(`endpoint=${cfg.endpoint} \u662F loopback \u4F46 edition=${edition || "\u672A\u77E5"}\uFF0C\u8D70\u6807\u51C6 OAuth`);
   }
-  if (tokenValid(cfg, REQUIRED_SCOPES)) return cfg;
+  if (tokenValid(cfg, MIN_SCOPES)) return cfg;
   log("\u9700\u8981\u8BA4\u8BC1\uFF0C\u542F\u52A8\u6D4F\u89C8\u5668 loopback \u6D41\u7A0B...");
   const meta = await fetchMetadata(cfg.endpoint);
   const tempServer = createServer();
@@ -14454,6 +14456,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       if (!local_path || typeof local_path !== "string") {
         throw new McpError(ErrorCode.InvalidParams, "local_path \u5FC5\u586B\uFF08string\uFF0C\u7EDD\u5BF9\u8DEF\u5F84\uFF09");
+      }
+      if (cfg.access_token && !cfg.scopes?.includes(SCOPE_DATA_WRITE)) {
+        throw new McpError(
+          ErrorCode.InvalidRequest,
+          "\u4E0A\u4F20\u6587\u4EF6\u9700\u8981\u300C\u6570\u636E\u6E90\uFF08\u5199\u5165\uFF09\u300D\u6743\u9650\uFF08mcp:data_write\uFF09\uFF0C\u5F53\u524D\u6388\u6743\u672A\u5305\u542B\u3002\u8BF7\u8054\u7CFB\u7BA1\u7406\u5458\u5728\u7528\u6237\u7EC4\u6A21\u7248\u91CC\u52FE\u9009\u300C\u6570\u636E\u6E90\uFF08\u5199\u5165\uFF09\u300D\u540E\u91CD\u65B0\u6388\u6743\u3002"
+        );
       }
       let result;
       try {
