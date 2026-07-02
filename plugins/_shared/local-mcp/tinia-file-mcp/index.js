@@ -13980,25 +13980,6 @@ import { join } from "node:path";
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 var CONFIG_DIR = join(homedir(), ".tinia");
 var CONFIG_PATH = join(CONFIG_DIR, "tinia-file-mcp.json");
-function loadMinioConfig() {
-  const raw = (process.env.TINIA_MINIO_ENDPOINT || "localhost:9000").trim();
-  let endpoint = raw;
-  let sslFromScheme;
-  const m = raw.match(/^(https?):\/\/(.+)$/i);
-  if (m) {
-    sslFromScheme = m[1].toLowerCase() === "https";
-    endpoint = m[2].replace(/\/+$/, "");
-  }
-  const useSSL = process.env.TINIA_MINIO_USE_SSL != null ? /^(1|true|yes)$/i.test(process.env.TINIA_MINIO_USE_SSL.trim()) : sslFromScheme ?? false;
-  return {
-    endpoint,
-    accessKey: (process.env.TINIA_MINIO_ACCESS_KEY || "minioadmin").trim(),
-    secretKey: (process.env.TINIA_MINIO_SECRET_KEY || "minioadmin").trim(),
-    bucket: (process.env.TINIA_MINIO_BUCKET || "tinia-blobs").trim(),
-    useSSL,
-    region: (process.env.TINIA_MINIO_REGION || "us-east-1").trim()
-  };
-}
 async function loadConfig() {
   const envEndpoint = process.env.TINIA_ENDPOINT?.trim();
   const envUpload = process.env.TINIA_UPLOAD_ENDPOINT?.trim();
@@ -14010,11 +13991,10 @@ async function loadConfig() {
   }
   const endpoint = envEndpoint || stored.endpoint || "https://tinia-saas.bestfunc.com";
   const upload_endpoint = envUpload || void 0;
-  const minio = loadMinioConfig();
   if (stored.endpoint && stored.endpoint !== endpoint) {
-    return { endpoint, upload_endpoint, minio };
+    return { endpoint, upload_endpoint };
   }
-  return { ...stored, endpoint, upload_endpoint, minio };
+  return { ...stored, endpoint, upload_endpoint };
 }
 async function saveConfig(cfg) {
   await mkdir(CONFIG_DIR, { recursive: true, mode: 448 });
@@ -14312,94 +14292,10 @@ async function uploadFileToDatasource(cfg, datasourceId, localPath, filenameOpt)
 }
 
 // src/blob.ts
-import { createHash as createHash2, createHmac } from "node:crypto";
+import { createHash as createHash2 } from "node:crypto";
 import { writeFile as writeFile2 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join as join2 } from "node:path";
-function parseMinioUri(uri, fallbackBucket) {
-  if (!uri.startsWith("minio://")) {
-    throw new Error(
-      `\u4E0D\u662F minio:// blob uri: ${uri}
-\uFF08\u684C\u9762\u5355\u673A\u7248\u7528\u672C\u5730\u6587\u4EF6\u7CFB\u7EDF\u5B58\u50A8 blob\uFF0C\u672C\u5DE5\u5177\u53EA\u652F\u6301 MinIO \u540E\u7AEF\u7684 dev/\u672C\u5730\u90E8\u7F72\uFF09`
-    );
-  }
-  const rest = uri.slice("minio://".length);
-  const slash = rest.indexOf("/");
-  if (slash < 0) {
-    return { bucket: fallbackBucket, key: rest };
-  }
-  const bucket = rest.slice(0, slash);
-  const key = rest.slice(slash + 1);
-  if (!bucket || !key) throw new Error(`minio uri \u683C\u5F0F\u9519\u8BEF: ${uri}`);
-  return { bucket, key };
-}
-var EMPTY_SHA256 = createHash2("sha256").update("").digest("hex");
-function hmac(key, data) {
-  return createHmac("sha256", key).update(data, "utf8").digest();
-}
-function encodeS3Path(bucket, key) {
-  const enc = (s) => encodeURIComponent(s).replace(/[!*'()]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
-  const segs = [bucket, ...key.split("/")].map(enc);
-  return "/" + segs.join("/");
-}
-function amzDates(now) {
-  const iso = now.toISOString();
-  const amzDate = iso.replace(/[:-]/g, "").replace(/\.\d+/, "");
-  const dateStamp = amzDate.slice(0, 8);
-  return { amzDate, dateStamp };
-}
-async function s3GetObject(cfg, bucket, key) {
-  const { amzDate, dateStamp } = amzDates(/* @__PURE__ */ new Date());
-  const host = cfg.endpoint;
-  const canonicalUri = encodeS3Path(bucket, key);
-  const payloadHash = EMPTY_SHA256;
-  const canonicalHeaders = `host:${host}
-x-amz-content-sha256:${payloadHash}
-x-amz-date:${amzDate}
-`;
-  const signedHeaders = "host;x-amz-content-sha256;x-amz-date";
-  const canonicalRequest = [
-    "GET",
-    canonicalUri,
-    "",
-    // canonical query string（无 query）
-    canonicalHeaders,
-    signedHeaders,
-    payloadHash
-  ].join("\n");
-  const scope = `${dateStamp}/${cfg.region}/s3/aws4_request`;
-  const stringToSign = [
-    "AWS4-HMAC-SHA256",
-    amzDate,
-    scope,
-    createHash2("sha256").update(canonicalRequest).digest("hex")
-  ].join("\n");
-  const kDate = hmac("AWS4" + cfg.secretKey, dateStamp);
-  const kRegion = hmac(kDate, cfg.region);
-  const kService = hmac(kRegion, "s3");
-  const kSigning = hmac(kService, "aws4_request");
-  const signature = createHmac("sha256", kSigning).update(stringToSign, "utf8").digest("hex");
-  const authorization = `AWS4-HMAC-SHA256 Credential=${cfg.accessKey}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
-  const url = `${cfg.useSSL ? "https" : "http"}://${host}${canonicalUri}`;
-  const res = await fetch(url, {
-    method: "GET",
-    headers: {
-      Host: host,
-      "x-amz-date": amzDate,
-      "x-amz-content-sha256": payloadHash,
-      Authorization: authorization
-    }
-  });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `MinIO GET \u5931\u8D25: HTTP ${res.status} \u2014 ${res.statusText}
-endpoint=${host} bucket=${bucket} key=${key}
-${body.slice(0, 500)}`
-    );
-  }
-  return Buffer.from(await res.arrayBuffer());
-}
 function sniffFormat(buf) {
   const b = buf;
   if (b.length >= 4 && b[0] === 80 && b[1] === 75 && b[2] === 3 && b[3] === 4) {
@@ -14428,10 +14324,19 @@ function sniffFormat(buf) {
   return { format: "unknown", hint: "\u672A\u77E5\u4E8C\u8FDB\u5236\uFF0C\u6309\u9700\u81EA\u884C\u5224\u65AD\u3002" };
 }
 var INLINE_LIMIT = 64 * 1024;
-async function fetchBlob(minio, blobUri, opts = {}) {
-  const { bucket, key } = parseMinioUri(blobUri, minio.bucket);
-  log(`fetch_blob ${blobUri} \u2192 minio ${minio.endpoint} bucket=${bucket}`);
-  const buf = await s3GetObject(minio, bucket, key);
+async function fetchBlob(baseUrl, accessToken, blobUri, opts = {}) {
+  const url = `${baseUrl.replace(/\/+$/, "")}/api/v1/mcp_data/blob-proxy?uri=${encodeURIComponent(blobUri)}`;
+  log(`fetch_blob ${blobUri} \u2192 ${baseUrl}`);
+  const headers = {};
+  if (accessToken) headers["Authorization"] = `Bearer ${accessToken}`;
+  const res = await fetch(url, { method: "GET", headers });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`blob \u8BFB\u53D6\u5931\u8D25: HTTP ${res.status} \u2014 ${res.statusText}
+uri=${blobUri}
+${body.slice(0, 500)}`);
+  }
+  const buf = Buffer.from(await res.arrayBuffer());
   const { format, hint } = sniffFormat(buf);
   const sha256 = createHash2("sha256").update(buf).digest("hex");
   const ext = format === "unknown" ? "bin" : format;
@@ -14439,8 +14344,6 @@ async function fetchBlob(minio, blobUri, opts = {}) {
   await writeFile2(savePath, buf);
   const result = {
     blob_uri: blobUri,
-    bucket,
-    key,
     size_bytes: buf.length,
     format,
     format_hint: hint,
@@ -14491,13 +14394,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "fetch_blob",
-      description: "\u3010\u62C9 blob \u539F\u59CB\u5B57\u8282\u5230\u672C\u673A\u3011\u628A Tinia \u7684 blob\uFF08minio:// uri\uFF09\u4E0B\u8F7D\u5230 AI \u8FD0\u884C\u673A\u5668\u7684\u78C1\u76D8\uFF0C\u8FD4\u56DE\u843D\u5730\u8DEF\u5F84 + \u683C\u5F0F\u55C5\u63A2 + sha256\uFF0C\u4F9B\u540E\u7EED\u7528 Python/\u5DE5\u5177\u89E3\u7801\u8BFB\u53D6\u3002\n\n\u5178\u578B\u7528\u9014\uFF1Aflow_node_output_preview \u53EA\u8FD4\u56DE FeatureMatrix / \u9891\u8C31\u77E9\u9635\u7AEF\u53E3\u7684\u300C\u4FE1\u5C01\u300D\uFF08\u6BCF\u884C\u5E26 local_uri\uFF09\uFF0C\u771F\u5B9E\u6570\u503C\u77E9\u9635\u5728 local_uri \u6307\u5411\u7684\u5185\u5C42 blob\uFF08numpy .npz\uFF09\u91CC\u3002\u7528\u672C\u5DE5\u5177\u628A\u8BE5 local_uri \u62C9\u4E0B\u6765\uFF0C\u518D np.load \u8BFB fbank / mod_freqs \u7B49\u6570\u7EC4\uFF0C\u5BFC\u51FA CSV\u3002\n\n\u8FD4\u56DE saved_path\uFF08\u9ED8\u8BA4\u843D /tmp\uFF09\uFF0CAI context \u53EA\u8FC7\u77ED JSON\uFF0C\u4E0E blob \u5927\u5C0F\u65E0\u5173\u3002format \u4F1A\u55C5\u63A2 npz/npy/wav/parquet/json \u5E76\u7ED9\u4E00\u53E5\u89E3\u7801\u63D0\u793A\u3002\n\n\u9002\u7528\u8303\u56F4\uFF1Ablob \u540E\u7AEF = MinIO \u7684 dev/\u672C\u5730\u90E8\u7F72\uFF08start-dev.sh \u7684 docker MinIO\uFF09\u3002\u8FDE\u63A5\u53C2\u6570\u6765\u81EA env\uFF08TINIA_MINIO_ENDPOINT/ACCESS_KEY/SECRET_KEY/BUCKET\uFF0C\u7F3A\u7701 localhost:9000 / minioadmin / tinia-blobs\uFF09\u3002\u684C\u9762\u5355\u673A\u7248\u7528\u672C\u5730\u6587\u4EF6\u7CFB\u7EDF\u5B58\u50A8\uFF0C\u4E0D\u662F minio:// scheme\uFF0C\u672C\u5DE5\u5177\u4F1A\u660E\u786E\u62A5\u9519\u3002",
+      description: "\u3010\u62C9 blob \u539F\u59CB\u5B57\u8282\u5230\u672C\u673A\u3011\u628A Tinia \u7684 blob \u4E0B\u8F7D\u5230 AI \u8FD0\u884C\u673A\u5668\u7684\u78C1\u76D8\uFF0C\u8FD4\u56DE\u843D\u5730\u8DEF\u5F84 + \u683C\u5F0F\u55C5\u63A2 + sha256\uFF0C\u4F9B\u540E\u7EED\u7528 Python/\u5DE5\u5177\u89E3\u7801\u8BFB\u53D6\u3002\n\n\u5178\u578B\u7528\u9014\uFF1Aflow_node_output_preview \u53EA\u8FD4\u56DE FeatureMatrix / \u9891\u8C31\u77E9\u9635\u7AEF\u53E3\u7684\u300C\u4FE1\u5C01\u300D\uFF08\u6BCF\u884C\u5E26 local_uri\uFF09\uFF0C\u771F\u5B9E\u6570\u503C\u77E9\u9635\u5728 local_uri \u6307\u5411\u7684\u5185\u5C42 blob\uFF08numpy .npz\uFF09\u91CC\u3002\u7528\u672C\u5DE5\u5177\u628A\u8BE5 local_uri \u62C9\u4E0B\u6765\uFF0C\u518D np.load \u8BFB fbank / mod_freqs \u7B49\u6570\u7EC4\uFF0C\u5BFC\u51FA CSV\u3002\n\n\u8FD4\u56DE saved_path\uFF08\u9ED8\u8BA4\u843D /tmp\uFF09\uFF0CAI context \u53EA\u8FC7\u77ED JSON\uFF0C\u4E0E blob \u5927\u5C0F\u65E0\u5173\u3002format \u4F1A\u55C5\u63A2 npz/npy/wav/parquet/json \u5E76\u7ED9\u4E00\u53E5\u89E3\u7801\u63D0\u793A\u3002\n\n\u7ECF Tinia Server \u6570\u636E\u9762\u4EE3\u7406\u8BFB\u53D6\uFF08\u9274\u6743\u6CBF\u7528 OAuth access_token\uFF0C\u8DDF\u5927\u6587\u4EF6\u4E0A\u4F20\u540C\u4E00\u5957\uFF09\uFF1Bserver \u7AEF\u8BFB MinIO / \u672C\u5730 fs\uFF0C\u5BA2\u6237\u7AEF\u65E0\u9700\u5BF9\u8C61\u5B58\u50A8\u51ED\u636E\u6216\u7F51\u7EDC\u53EF\u8FBE\u6027 \u2014\u2014 \u8FDC\u7A0B server \u90E8\u7F72\u3001\u684C\u9762\u5355\u673A\u7248\u672C\u5730\u5B58\u50A8\u90FD\u901A\u3002",
       inputSchema: {
         type: "object",
         properties: {
           blob_uri: {
             type: "string",
-            description: "blob \u7684 minio:// uri\uFF0C\u5F62\u5982 minio://tinia-blobs/blobs/70/5c0b...\uFF08\u4ECE flow_node_output_preview \u7684 local_uri / blob_uri \u5B57\u6BB5\u62FF\uFF09"
+            description: "blob \u7684 uri\uFF0C\u5F62\u5982 minio://tinia-blobs/blobs/70/5c0b...\uFF08\u4ECE flow_node_output_preview \u7684 local_uri / blob_uri \u5B57\u6BB5\u62FF\uFF09"
           },
           save_path: {
             type: "string",
@@ -14518,21 +14421,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   if (!args) throw new McpError(ErrorCode.InvalidParams, "\u7F3A\u5C11\u53C2\u6570");
   try {
     let cfg = await loadConfig();
+    cfg = await ensureToken(cfg);
+    const dataBase = cfg.upload_endpoint || cfg.endpoint;
     if (name === "fetch_blob") {
       const { blob_uri, save_path, include_base64 } = args;
       if (!blob_uri || typeof blob_uri !== "string") {
-        throw new McpError(ErrorCode.InvalidParams, "blob_uri \u5FC5\u586B\uFF08string\uFF0Cminio:// uri\uFF09");
+        throw new McpError(ErrorCode.InvalidParams, "blob_uri \u5FC5\u586B\uFF08string\uFF0Cblob uri\uFF09");
       }
-      if (!cfg.minio) {
-        throw new McpError(ErrorCode.InternalError, "MinIO \u914D\u7F6E\u7F3A\u5931\uFF08loadConfig \u672A\u6CE8\u5165 minio\uFF09");
-      }
-      const result = await fetchBlob(cfg.minio, blob_uri, {
+      const opts = {
         savePath: typeof save_path === "string" ? save_path : void 0,
         includeBase64: include_base64 === true
-      });
+      };
+      let result;
+      try {
+        result = await fetchBlob(dataBase, cfg.access_token, blob_uri, opts);
+      } catch (e) {
+        if (e instanceof Error && e.message.includes("HTTP 401")) {
+          log("\u6536\u5230 401,\u6E05\u9664\u672C\u5730 token \u91CD\u65B0\u6388\u6743\u540E\u91CD\u8BD5");
+          cfg = await ensureToken({ ...cfg, access_token: void 0, expires_at: void 0 });
+          const base = cfg.upload_endpoint || cfg.endpoint;
+          result = await fetchBlob(base, cfg.access_token, blob_uri, opts);
+        } else {
+          throw e;
+        }
+      }
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     }
-    cfg = await ensureToken(cfg);
     if (name === "upload_file_to_datasource") {
       const { datasource_id, local_path, filename } = args;
       if (!datasource_id || typeof datasource_id !== "number") {
