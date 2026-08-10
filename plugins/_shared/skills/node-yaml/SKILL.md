@@ -207,17 +207,70 @@ emits_quantity: velocity               # 节点输出的物理量;不声明 = �
 ```yaml
 automl:
   tunable: true        # 节点的 params 可加入搜索空间
-  evaluable: true      # 节点的输出可作 features 拿去训练判别函数
-  labelable: false     # 节点的输出可作 label 来源（带 attributes 的数据源类节点）
+  evaluable: true      # 节点的 features 输出可作评估目标
+  data_source: false   # 节点的输出可作 label 来源（带 attributes 的数据源类节点）
+  item_split: false    # 节点会改变 item 粒度（一条切成多段）
 ```
 
 | 字段 | 何时为 true |
 |------|-------------|
 | `tunable` | 节点有数值参数想调参（如阈值、窗长、平滑系数） |
-| `evaluable` | 节点输出 `FeatureMatrix`（features 端口）能拿去训分类器 |
-| `labelable` | 数据源节点 / `attach_attributes` / `filter_node` 等能提供"分组维度" |
+| `evaluable` | 节点输出 `FeatureMatrix`（features 端口）能拿去做评估 |
+| `data_source` | 数据源节点 / `attach_attributes` / `filter_node` 等能提供"分组维度" |
+| `item_split` | 节点把一条 item 切成多段（如音频分割输出 `父id__segN`）|
 
 不设 = 不参与 AutoML（默认）。
+
+> ⚠️ **字段名是 `data_source`，不是 `labelable`**。写 `labelable` 会被 yaml 解析**静默忽略** ——
+> 节点看着没报错，但在 AutoML 配置向导的「标签来源」下拉里根本不出现。
+
+`item_split` 是防错声明而非能力声明：夹在【数据源(标签)】和【特征节点】之间时，
+标签是原件级、特征是段级，`item_id` 对不上。声明了它，前端在配置期就拦下来提示。
+
+#### `eval_columns`（可选；声明「限值直评」能用的预测列）
+
+节点自己就能算出判定列 / 连续分值时声明它，AutoML 的 **direct 评估**模式可以直接
+拿这一列跟真实标签比，不用再训分类器：
+
+```yaml
+automl:
+  evaluable: true
+  eval_columns:
+    - key: overall_status_ok    # features 列名（不带 nodeID 前缀）
+      label: 总体判定
+      type: boolean             # 判定列（0/1），阈值固定 0.5
+    - key: margin_min
+      label: 最小裕度
+      type: continuous          # 连续分值，按阈值二分
+```
+
+前端据此渲染下拉选列。没声明 = 这个节点在 direct 模式下选不了。
+
+### `skip_side_effects_in_trial`（bool，可选；写外部世界的节点必看）
+
+```yaml
+skip_side_effects_in_trial: true
+```
+
+**只有会产生副作用的节点才需要**：往数据库 / 记录库写、发消息、落文件到共享目录、
+调外部 API……这类节点在 AutoML 搜参时会被整张流程反复跑几十上百遍，
+每遍都执行副作用 = 一次搜参往生产库灌几百条调参中间产物。
+
+声明后，搜参执行时节点会收到 `rt.skip_side_effects == True`：
+
+```python
+rt = Runtime.from_stdin()
+if rt.skip_side_effects:
+    rt.emit_log("info", "搜参中，跳过写库")
+else:
+    write_to_db(rows)
+rt.emit_output("data", passthrough_handle)   # ← 无论如何都要照常输出
+```
+
+**铁律：跳的是副作用，不是节点。** 整个跳过节点会让下游断流、流程直接失败 ——
+必须照常输出、照常透传，只是不落库。
+
+不设 = 不跳过（默认）。纯计算节点不用管这个字段。
 
 ### `ui`（object，可选）
 

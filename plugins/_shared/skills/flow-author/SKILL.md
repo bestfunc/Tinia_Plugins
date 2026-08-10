@@ -144,28 +144,72 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 **chart_viewer 自适应解析三种输入结构**：FeatureMatrix（columns + rows）、IndicatorData（items + value）、score_predictor 风格（items + attributes）。
 
-### 典型场景：AutoML 评分预测部署
+### 典型场景：训练模型 → 入制品库 → 上线检测
 
-用户在 AutoML 调参完看判别函数时点"→ 创建评分节点"——系统会自动 fork 流程 + 加好 `bestfunc/score_predictor` + 接 `bestfunc/chart_viewer`，**正常情况你不需要手搭这条链路**。但要手搭的话：
+**要搭两张流程，不是一张。** 训练流程跑出模型存进制品库，检测流程从库里读回来打分。
+两张流程靠**同一个分组码**（`group_code`）串起来。
+
+> 早期版本是在 AutoML 里点"→ 创建评分节点"、把判别函数 JSON 粘进节点参数 ——
+> **那个入口已经删了**。现在模型走制品库，不再手粘 JSON。
+
+#### 流程 ①：训练
 
 ```js
-{flow_id, ops: [
-  // 上游已经是 features 输出（FeatureMatrix，含训练时同样的字段集）
+{flow_id: 训练流程, ops: [
+  // 上游已经是 features 输出（FeatureMatrix）+ 带标签的数据集
   {op: "add_node", class_type: "bestfunc/score_predictor", alias: "scorer",
     params: {
-      discriminant_json: { algorithm: "lr", weights: {...}, bias: ..., threshold: ..., classes: [...], class_names: [...] },
-      threshold_override: 0,
-      score_field: "score",
-      predicted_class_field: "predicted",
+      mode: "fit",              // 留空也行：没接 model 端口就自动训练
+      preset: "qc",             // 声学质检预设：锁 LR + 钉死正则，保住可复现性
+      label_field: "item_label", // 从每行 attributes 的哪个字段读标签
+      positive_label: "NG",     // ← 见下方警告，务必显式填
     }},
   {op: "connect", src: "src_features", src_port: "features", dst: "scorer", dst_port: "features"},
+  // ⚠️ 标签在数据集上，不在特征矩阵上 —— dataset 端口必须接
+  {op: "connect", src: "src_dataset", src_port: "materialized", dst: "scorer", dst_port: "dataset"},
 
-  // 接图表查看器看分数分布
-  {op: "add_node", class_type: "bestfunc/chart_viewer", alias: "chart",
-    params: { default_chart_type: "box", default_x_field: "predicted", default_y_fields: "score", default_group_by: "predicted" }},
-  {op: "connect", src: "scorer", src_port: "scored", dst: "chart", dst_port: "data"},
+  // 训练出的模型存进制品库：接了 model 输入 = 写模式
+  {op: "add_node", class_type: "bestfunc/model_artifact", alias: "artifact",
+    params: {group_code: "产线A_机型X", write_strategy: "new_major", auto_activate: true}},
+  {op: "connect", src: "scorer", src_port: "model", dst: "artifact", dst_port: "model"},
 ]}
 ```
+
+#### 流程 ②：检测
+
+```js
+{flow_id: 检测流程, ops: [
+  // 制品库取模型：不接输入 = 读模式。active = 跟随上线指针
+  {op: "add_node", class_type: "bestfunc/model_artifact", alias: "artifact",
+    params: {group_code: "产线A_机型X", read_strategy: "active"}},
+
+  {op: "add_node", class_type: "bestfunc/score_predictor", alias: "scorer", params: {mode: "apply"}},
+  {op: "connect", src: "src_features", src_port: "features", dst: "scorer", dst_port: "features"},
+  {op: "connect", src: "artifact", src_port: "model", dst: "scorer", dst_port: "model"},
+
+  // 判定结果落记录库，供事后查询 / 回填真值
+  {op: "add_node", class_type: "bestfunc/flow_record", alias: "rec",
+    params: {flow_label: "产线A_下线检测", group_code: "产线A_机型X"}},
+  {op: "connect", src: "scorer", src_port: "scored", dst: "rec", dst_port: "data"},
+]}
+```
+
+**换模型 = 在制品库里移动 active 指针，检测流程一行都不用改。**
+
+#### 三个最容易踩的坑
+
+| 坑 | 现象 | 解 |
+|---|---|---|
+| 训练时只接 `features`，忘了接 `dataset` | 报"有标签的行 0 条" | 标签在数据集的 `attributes` 上，特征节点的输出不带它 |
+| 不填 `positive_label` | 分数方向整个反过来，**且不报错** | sklearn 按标签字典序定方向，`OK`/`NG` 下高分侧其实是 OK |
+| 把特征池写入接在打分之后 | 重训时把模型自己的输出当成输入特征 | `feature_pool_write` 要从**特征节点**分一路出来 |
+
+#### AutoML 搭在这条链上时
+
+副作用节点（`flow_record` / `feature_pool_write`）默认带 `skip_in_trial`，
+搜参时**跳过写库但照常透传**，不会往生产库灌几百条中间产物 —— 一般不用动。
+评分器在 AutoML 里要用 `mode: "eval"`（K 折 OOF 出样本外分）；用 `fit` 会因为
+样本内打分而虚高。
 
 ## 端口连接报错怎么解读
 

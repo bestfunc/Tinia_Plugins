@@ -87,7 +87,7 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | `fbank_extract` | 频谱特征提取（filter bank）|
 | `st_features` | 结构张量特征（谱图纹理特征）|
 | `attribute_extract` | 属性提取（输出 AttributeTable）|
-| `baseline_stats` | 基线统计（建立参考样本）|
+| `acoustic_fingerprint` | 声学指纹（高维特征矩阵，质检链路的特征来源）|
 | `audio_emit` | 波形输出（把 AudioData 降采样成 vs_time 指标）|
 
 ### 心理声学指标（analysis）
@@ -139,8 +139,11 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | 节点 | 说明 |
 |---|---|
 | `cluster_explore` | 聚类探索（KMeans / DBSCAN / HDBSCAN / GMM + PCA / UMAP / t-SNE 降维）|
-| `zscore_anomaly` | Z-score 异常检测 |
-| `score_predictor` | **AutoML 评分预测**（v1.26+）—— 接 AutoML 判别函数 JSON，按公式跑每行 score + 预测类别，支持 5 种算法（逻辑回归 / 线性判别 / 二阶多项式 / 决策树 / 梯度提升树）|
+| `zscore_anomaly` | Z-score 异常检测（v2.0.0 **fit/apply 双模式**：不接 baseline 输入=建基线，接了=套基线判定。已吸收并替代旧的 `baseline_stats`）|
+| `score_predictor` | **评分器**（v2.0.0）—— 把高维特征降成一个分。训练 / 推理 / 评估三模式；监督组 5 种算法（LR / LDA / 二阶多项式 / 决策树 / GBDT）+ 单类组 3 种（knn_pit / shrinkL2 / maxz，只有 OK 样本也能冷启动）|
+| `model_artifact` | **制品库读写口**（接输入=存、不接=取），双层版本号 + active 上线指针 |
+| `flow_record` | **检测记录**（判定结果落库，供查询 / 统计 / 回填真值），透传不阻断 |
+| `feature_pool_write` / `feature_pool_read` | **特征池**（攒特征供重训，跳过最慢的提特征步骤）|
 
 ### 仪表盘
 
@@ -169,8 +172,13 @@ DAG 的最小执行单元，一个"做某件事的能力"：
 | 调参引擎 | Optuna 贝叶斯优化驱动，支持搜索空间 / 评估函数声明 / Top-K 结果 |
 | 训练 / 验证拆分 | 真 holdout（不再是 val 子集自跑 CV 蒙到 1.0），gap > 15% ⚠️ 过拟合警告 |
 | 区分度诊断 | PCA 散点 + 混淆矩阵 + per-class 指标 + 特征 × 样本热力图 + 错分明细 |
-| 判别函数蒸馏 | best trial 拟合 5 种简单算法（LR/LDA/Poly2/Tree/GBDT）→ 公式 / 权重柱 / 决策树图 |
-| 一键创建评分节点 | 蒸馏完直接 fork 原流程 + 加 score_predictor + 接 chart_viewer，部署只需连一根线 |
+| 限值直评 | 节点自带判定列 / 连续分值时（node.yaml 声明 `eval_columns`）直接拿它跟真实标签比，不用再训分类器 |
+| 副作用隔离 | 写库 / 发消息类节点声明 `skip_side_effects_in_trial`，搜参时跳过写入但照常透传，不污染生产库 |
+
+> **判别函数已从 AutoML 里剥离**（v1.45）。AutoML 只管定参 —— 告诉你哪组参数效果好；
+> 判别函数变成独立的通用节点 `score_predictor`（评分器），模型走制品库。
+> 原先的「判别函数 tab / 复制 JSON / → 创建评分节点」入口全部移除：
+> 声学指纹这类没有可调参数的链路，现在直接搭"评分器 → 制品库"，根本不经过 AutoML。
 
 ### 节点开发节奏
 

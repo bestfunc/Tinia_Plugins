@@ -38,7 +38,7 @@ signal_generator (已知特征) → <被测节点> → 查看器 (输出指标)
 | `loudness` / `sharpness` / `roughness` / `tonality` / `tnr` | `references/psychoacoustic-standards.md` |
 | `iir_filter` / `fir_filter` | 见下面"模板：测滤波器频响"（不需读 reference）|
 | `active_segment` / `zscore_anomaly` | 见下面"段落 / 异常检测"|
-| `indicator_math` / `indicator_merge` / `baseline_stats` | 见下面"指标节点"|
+| `indicator_math` / `indicator_merge` | 见下面"指标节点"|
 | `channel_split` / `channel_select`（多通道）| 见下面"模板 8：多通道节点"|
 
 **Read 的时机**：用户说"测 loudness" → 先 Read psychoacoustic-standards.md → 再搭流程。  
@@ -152,14 +152,19 @@ signal_generator (silence, 1s) + signal_generator (sine 1k, 2s) + signal_generat
 ```
 
 ```
-# zscore_anomaly：用基线 vs 异常输入验证
-signal_generator (white_noise, seed=42)  → 提取特征 → baseline_stats   (建立 OK 基线)
-signal_generator (sine, 5kHz amp=0.5)    → 提取特征 → zscore_anomaly + baseline   (sine 应被检出异常)
+# zscore_anomaly（v2.0.0 双模式）：一个节点跑两遍，训练一遍、推理一遍
+# ① 训练：不接 baseline 输入 → 从 baseline 端口出基线制品
+signal_generator (white_noise, seed=42)  → 提取特征 → zscore_anomaly       → baseline
+# ② 推理：把①的 baseline 接进来 → 套基线判 ok/anomaly
+signal_generator (sine, 5kHz amp=0.5)    → 提取特征 → zscore_anomaly + baseline → result
 ```
 
 判定：silence 段不应被检出有效段；纯 sine 在 white noise 基线下 z-score 应远超阈值。
 
-### 模板 7：指标节点（indicator_math / merge / baseline_stats）
+> 别再找 `baseline_stats` —— 它已经被并进 `zscore_anomaly` 的训练模式删掉了。
+> **接不接 `baseline` 输入**就是 fit / apply 的开关。
+
+### 模板 7：指标节点（indicator_math / indicator_merge）
 
 ```
 # indicator_math add：两个 sine 频谱相加
