@@ -22,7 +22,7 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 | `IndicatorData` | 分析输出（单标量指标） | `{indicator: "loudness", items: [{item_id, name, value, _provenance, ...}]}` |
 | `FeatureMatrix` | 分析输出（多列特征矩阵） | `{columns: [...], labels: {key: 中文名}, rows: [{item_id, name, features: {col: val}}]}` |
 | `AttributeTable` | 属性/标签表（从 items 提取字段、聚类标签等输出） | `{columns: [...], rows: [{item_id, <alias>: val, ...}], total, source_total}` |
-| `BaselineStats` | 基线统计阈值（baseline_stats 输出，给异常检测当参考） | `{columns: [...], feature_direction: {col: "high"/"low"/"both"}, thresholds: {col: {mean, std, min, max, count, p5, p95, ...}}, sample_count}` |
+| `BaselineStats` | 基线统计阈值（`zscore_anomaly` 训练模式输出，给异常检测当参考） | `{columns: [...], feature_direction: {col: "high"/"low"/"both"}, thresholds: {col: {mean, std, min, max, count, p5, p95, ...}}, sample_count}` |
 | `AnomalyResult` | 异常检测结果（zscore_anomaly 输出） | `{summary: {total, ok_count, anomaly_count, feature_names, method, thresholds}, items: [{item_id, name, status: "ok"/"anomaly", severity, n_triggers, triggers, features}], views: {distribution, spectrum_ref, audio_ref}}` |
 | `AnnotationLayer` | 段落标注层（有效段检测等输出） | `{items: [{item_id, segments: [{start, end, label}]}]}` |
 | `FileBlob` | 单个文件（CSV 导出、报告等） | Handle 自带 `uri / hash / size / mime` |
@@ -58,7 +58,7 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 
 **铁律**：
 - `columns` / `features` dict 的 key **永远用英文标识符**（机器内部用，对接 AutoML / 评分预测要求稳定）
-- `labels` 字段是可选的，做"英文 key → 中文显示名"映射；前端 chart_viewer / AutoML 诊断 / 判别函数公式都会用它显示中文
+- `labels` 字段是可选的，做"英文 key → 中文显示名"映射；前端 chart_viewer / AutoML 诊断 / 评分器公式视图都会用它显示中文
 - SDK 的 `FeatureBuilder(labels=FEATURE_LABELS)` 一行配置自动产出 labels 字段，**新节点必须传**
 
 ## 怎么选输入类型
@@ -83,12 +83,18 @@ Tinia 节点之间传递的**不是数据本体**，而是 **Handle（blob 引�
 - **分割/选择节点** → `ProcessedDataset`（保持音频语义）
 - **标注检测** → `AnnotationLayer`
 - **属性提取 / 聚类标签**（从 items 抽字段或打标签，输出 `{columns, rows}`）→ `AttributeTable`（如 `attribute_extract.table` / `cluster_explore.clusters`）
-- **基线统计**（算出每列特征的 mean/std/分位阈值，供异常检测当参考）→ `BaselineStats`（如 `baseline_stats.baseline`）
+- **基线统计**（算出每列特征的 mean/std/分位阈值，供异常检测当参考）→ `BaselineStats`（如 `zscore_anomaly.baseline`，训练模式的产出）
 - **异常检测**（拿特征 + 基线判 ok/anomaly，带 severity 与分布视图）→ `AnomalyResult`（如 `zscore_anomaly.result`）
 - **导出节点**（CSV/报告） → `FileBlob`
 - **items + attributes 风格**（如 `score_predictor.scored`）→ 类型 `Any`，结构 `{items:[{item_id, attributes:{score, predicted}, features:{...}}], labels:{...}}` —— chart_viewer 自适应解析
 
-> 分析链路常见接法：`分析节点→FeatureMatrix` →（`baseline_stats`→`BaselineStats`）→ `zscore_anomaly`（同时接 FeatureMatrix + BaselineStats）→`AnomalyResult`；`attribute_extract`（Any→`AttributeTable`）的标签可喂给 `cluster_explore` / `matrix_view` 做染色分组。
+> 分析链路常见接法：`分析节点→FeatureMatrix` → `zscore_anomaly` →`AnomalyResult`；`attribute_extract`（Any→`AttributeTable`）的标签可喂给 `cluster_explore` / `matrix_view` 做染色分组。
+
+> **`zscore_anomaly` 是 fit/apply 双模式节点**（v2.0.0 起，吸收了已删除的 `baseline_stats`）：
+> 不接 `baseline` 输入 = **训练**，用当前这批数据建基线并从 `baseline` 端口发出来；
+> 接了 `baseline` 输入 = **推理**，套已有基线判 ok/anomaly。所以不再需要"先 baseline_stats 再 zscore"两个节点。
+> 这也是平台的**可训练节点范式** —— 你自己写训练类节点时照这个来：同一个节点，
+> 有制品输入就 apply、没有就 fit，别拆成两个节点。
 
 ## 动态端口
 

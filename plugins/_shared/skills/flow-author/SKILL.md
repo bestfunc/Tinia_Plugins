@@ -78,20 +78,29 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 **规则**：
 
 1. **不需要"加端口"操作** —— 端口按命名规则**按需自动激活**
-2. 端口名规则：`<prefix>_1`, `<prefix>_2`, ... `<prefix>_N`（N 不超过 max_ports）
-3. **连到 `in_3` 时自动激活第 3 个端口**，不需要先 set_params 或别的操作
+2. 端口名规则：`<prefix>_1`, `<prefix>_2`, ... `<prefix>_N`（N 不超过 max_ports）。
+   **prefix 逐个节点查 `nodes_describe`，别默认是 `in`** —— 如 `annotation_merge` 的是 `layer`
+3. **连到 `in_3` 时自动激活第 3 个端口**，不需要先 set_params 或别的操作。
+   `flow_connect` 会顺手把节点的 `_port_count` 抬到 3（那是画布决定"画几个口"的参数）
 4. **AI 一定要按用户给的数据源数量连足所有 in_N**：用户 4 个数据集合并 → 连 `in_1`/`in_2`/`in_3`/`in_4` 四条边
 5. **不要跳号**：直接连 in_4 跳过 in_3 会让端口出现"空槽位"，前端看着乱
+
+> ⚠️ **端口名必须带下划线**（`in_1` 而不是 `in1`），序号从 1 开始。写错会直接报错并提示正确写法。
+>
+> ⚠️ **不要自己去 set_params 设 `port_count`** —— 没有这个参数。画布读的是 `_port_count`
+> （下划线开头），而且 `flow_connect` 已经替你维护了。手写 `port_count` 不会报错也不会生效，
+> 后果是：流程跑起来数据完全正确，但画布上多出来的那个口根本没画，看着像少接了一路数据源。
 
 ### 常见动态端口节点速查
 
 | 节点 | prefix | 范围 | 用途 |
 |---|---|---|---|
 | `bestfunc/dataset_merge` | `in` | 2-8 | 合并多个数据集（按 item_id）|
-| `bestfunc/dashboard_node` | `in` | 1-16 | 看板节点，接多个 viewer 的 dashboard_view 输出 |
+| `bestfunc/dashboard` | `in` | 1-64 | 看板节点，接多个 viewer 的 dashboard_view 输出 |
 | `bestfunc/indicator_merge` | `in` | 2-8 | 合并多个指标节点输出 |
 | `bestfunc/feature_merge` | `in` | 2-32 | 合并多个特征源（IndicatorData 单值 + FeatureMatrix 多列都能接，v3.0.0+） |
-| `bestfunc/annotation_merge` | `in` | 2-8 | 合并多个段落标注 |
+| `bestfunc/annotation_segment_merge` | `in` | 2-8 | 合并多个段落标注（内置）|
+| `bestfunc/annotation_merge` | **`layer`** | 2-16 | 合并标注层（插件节点，prefix 不是 `in`）|
 
 ### 典型场景：4 个数据集合并
 
@@ -105,10 +114,11 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
   // merge 节点（只需加 1 个，不用"加端口"）
   {op: "add_node", class_type: "bestfunc/dataset_merge", alias: "mrg"},
   // 4 条连边，分别到 in_1 / in_2 / in_3 / in_4 —— 关键：N 个数据集就连 N 条
-  {op: "connect", src: "ds1", src_port: "out", dst: "mrg", dst_port: "in_1"},
-  {op: "connect", src: "ds2", src_port: "out", dst: "mrg", dst_port: "in_2"},
-  {op: "connect", src: "ds3", src_port: "out", dst: "mrg", dst_port: "in_3"},
-  {op: "connect", src: "ds4", src_port: "out", dst: "mrg", dst_port: "in_4"},
+  // dataset_node 的输出端口叫 materialized（不是 out）—— 端口名一律以 nodes_describe 为准
+  {op: "connect", src: "ds1", src_port: "materialized", dst: "mrg", dst_port: "in_1"},
+  {op: "connect", src: "ds2", src_port: "materialized", dst: "mrg", dst_port: "in_2"},
+  {op: "connect", src: "ds3", src_port: "materialized", dst: "mrg", dst_port: "in_3"},
+  {op: "connect", src: "ds4", src_port: "materialized", dst: "mrg", dst_port: "in_4"},
 ]}
 ```
 
@@ -116,8 +126,8 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 ```js
 // 3 个分析节点 → 各自有 dashboard_view 输出
-// 1 个 dashboard_node 接所有 viewer
-{op: "add_node", class_type: "bestfunc/dashboard_node", alias: "dash"},
+// 1 个看板节点接所有 viewer（class_type 是 bestfunc/dashboard，不带 _node）
+{op: "add_node", class_type: "bestfunc/dashboard", alias: "dash"},
 {op: "connect", src: "spectrum_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_1"},
 {op: "connect", src: "indicator_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_2"},
 {op: "connect", src: "cluster_viz", src_port: "dashboard_view", dst: "dash", dst_port: "in_3"},
@@ -144,28 +154,73 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 
 **chart_viewer 自适应解析三种输入结构**：FeatureMatrix（columns + rows）、IndicatorData（items + value）、score_predictor 风格（items + attributes）。
 
-### 典型场景：AutoML 评分预测部署
+### 典型场景：训练模型 → 入制品库 → 上线检测
 
-用户在 AutoML 调参完看判别函数时点"→ 创建评分节点"——系统会自动 fork 流程 + 加好 `bestfunc/score_predictor` + 接 `bestfunc/chart_viewer`，**正常情况你不需要手搭这条链路**。但要手搭的话：
+**要搭两张流程，不是一张。** 训练流程跑出模型存进制品库，检测流程从库里读回来打分。
+两张流程靠**同一个分组码**（`group_code`）串起来。
+
+> 早期版本是在 AutoML 里点"→ 创建评分节点"、把判别函数 JSON 粘进节点参数 ——
+> **那个入口已经删了**。现在模型走制品库，不再手粘 JSON。
+
+#### 流程 ①：训练
 
 ```js
-{flow_id, ops: [
-  // 上游已经是 features 输出（FeatureMatrix，含训练时同样的字段集）
+{flow_id: 训练流程, ops: [
+  // 上游已经是 features 输出（FeatureMatrix）+ 带标签的数据集
   {op: "add_node", class_type: "bestfunc/score_predictor", alias: "scorer",
     params: {
-      discriminant_json: { algorithm: "lr", weights: {...}, bias: ..., threshold: ..., classes: [...], class_names: [...] },
-      threshold_override: 0,
-      score_field: "score",
-      predicted_class_field: "predicted",
+      mode: "fit",              // 留空也行：没接 model 端口就自动训练
+      preset: "qc",             // 声学质检预设：锁 LR + 钉死正则，保住可复现性
+      label_field: "item_label",   // 从每行 attributes 的哪个字段读标签
+      positive_labels: ["NG"],     // ← 见下方警告，务必显式填；多类缺陷就全列上，如 ["NG1","NG2"]
     }},
   {op: "connect", src: "src_features", src_port: "features", dst: "scorer", dst_port: "features"},
+  // ⚠️ 标签在数据集上，不在特征矩阵上 —— dataset 端口必须接
+  {op: "connect", src: "src_dataset", src_port: "materialized", dst: "scorer", dst_port: "dataset"},
 
-  // 接图表查看器看分数分布
-  {op: "add_node", class_type: "bestfunc/chart_viewer", alias: "chart",
-    params: { default_chart_type: "box", default_x_field: "predicted", default_y_fields: "score", default_group_by: "predicted" }},
-  {op: "connect", src: "scorer", src_port: "scored", dst: "chart", dst_port: "data"},
+  // 训练出的模型存进制品库：接了 model 输入 = 写模式
+  {op: "add_node", class_type: "bestfunc/model_artifact", alias: "artifact",
+    params: {group_code: "产线A_机型X", write_strategy: "new_major", auto_activate: true}},
+  {op: "connect", src: "scorer", src_port: "model", dst: "artifact", dst_port: "model"},
 ]}
 ```
+
+#### 流程 ②：检测
+
+```js
+{flow_id: 检测流程, ops: [
+  // 制品库取模型：不接输入 = 读模式。active = 跟随上线指针
+  {op: "add_node", class_type: "bestfunc/model_artifact", alias: "artifact",
+    params: {group_code: "产线A_机型X", read_strategy: "active"}},
+
+  {op: "add_node", class_type: "bestfunc/score_predictor", alias: "scorer", params: {mode: "apply"}},
+  {op: "connect", src: "src_features", src_port: "features", dst: "scorer", dst_port: "features"},
+  {op: "connect", src: "artifact", src_port: "model", dst: "scorer", dst_port: "model"},
+
+  // 判定结果落记录库，供事后查询 / 回填真值
+  {op: "add_node", class_type: "bestfunc/flow_record", alias: "rec",
+    params: {flow_label: "产线A_下线检测", group_code: "产线A_机型X"}},
+  {op: "connect", src: "scorer", src_port: "scored", dst: "rec", dst_port: "data"},
+]}
+```
+
+**换模型 = 在制品库里移动 active 指针，检测流程一行都不用改。**
+
+#### 三个最容易踩的坑
+
+| 坑 | 现象 | 解 |
+|---|---|---|
+| 训练时只接 `features`，忘了接 `dataset` | 报"有标签的行 0 条" | 标签在数据集的 `attributes` 上，特征节点的输出不带它 |
+| 不填 `positive_labels` | 分数方向整个反过来，**且不报错** | sklearn 按标签字典序定方向，`OK`/`NG` 下高分侧其实是 OK |
+| 标签多于两类 | 直接报错（不会硬跑） | 评分器只输出一个分。把算不良的标签全勾进 `positive_labels`，其余自动归低分侧 |
+| 把特征池写入接在打分之后 | 重训时把模型自己的输出当成输入特征 | `feature_pool_write` 要从**特征节点**分一路出来 |
+
+#### AutoML 搭在这条链上时
+
+副作用节点（`flow_record` / `feature_pool_write`）默认带 `skip_in_trial`，
+搜参时**跳过写库但照常透传**，不会往生产库灌几百条中间产物 —— 一般不用动。
+评分器在 AutoML 里要用 `mode: "eval"`（K 折 OOF 出样本外分）；用 `fit` 会因为
+样本内打分而虚高。
 
 ## 端口连接报错怎么解读
 

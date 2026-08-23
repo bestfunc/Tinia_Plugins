@@ -153,7 +153,10 @@ export default function MyNodeParams({ params, onChange }: Props) {
 }
 ```
 
-**参考实现**：`bestfunc/active_segment` / `bestfunc/score_predictor` / `bestfunc/chart_viewer` 的 `ui/ParamsForm.tsx` 都是这个模式，直接抄结构改文案。
+**参考实现**：`bestfunc/modulation_spectrum`（标杆）/ `bestfunc/active_segment` / `bestfunc/zscore_anomaly` 的 `ui/ParamsForm.tsx` 都是这个模式，直接抄结构改文案。
+
+> 别去抄 `score_predictor` / `chart_viewer` —— 它们是**内置 Go 节点**，表单在主仓
+> `client/src/components/nodes/builtin/` 下，插件仓里读不到。
 
 ### 弹窗内容必含的 6 个区块
 

@@ -86,7 +86,8 @@
   - 声学：`level_meter`、`fft_spectrum`、`octave_analysis`、`modulation_spectrum`、`scale_space_spectrum`
   - 振动/旋转机械：`order_tracking`、`envelope_demod`、`time_stats`
   - 心理声学：`loudness`、`roughness`、`sharpness`、`tonality`、`tnr`、`fbank_extract`
-  - 特征工程：`feature_merge`、`feature_normalize`、`spec_limit_check`、`cluster_explore`、`zscore_anomaly`
+  - 特征工程：`feature_merge`、`feature_normalize`、`spec_limit_check`、`cluster_explore`、`zscore_anomaly`、`acoustic_fingerprint`
+  - 质检落地（Go 内置）：`score_predictor`（评分器）、`model_artifact`（制品库）、`flow_record`（检测记录）、`feature_pool_write` / `feature_pool_read`（特征池）
   - 查看器：`spectrum_viewer`、`indicator_viewer`、`chart_viewer`、`matrix_view`
 
 > **内置节点 vs Python 节点**：`dataset_node` / `dataset_merge` / `materialize_node` / `dashboard_node` / `csv_export` / `filter_node` 等是**主仓 Go 内置节点**（`server/internal/nodes/builtin/`），不在 Tinia_nodes；`channel_split` / `channel_select` 才在 Tinia_nodes。

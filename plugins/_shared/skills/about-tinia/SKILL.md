@@ -107,7 +107,8 @@ user-invocable: true
 | **SDK 流式会话 / 实时数据流** | 持续推数据、实时取结果，适合在线 / 边采边算 | `08-roadmap.md`、`11-mcp-ai-integration.md` |
 | **常驻执行池（HotPool）** | 节点进程常驻待命，高频 / 实时调用复用热进程加速 | `04-key-concepts.md`、`08-roadmap.md` |
 | **看板（Dashboard）大扩充** | 富文本 / 图片 / HTML / 视频组件 + 批量编辑 + 整屏排版 + 快照分享 | `08-roadmap.md`、`12-node-ecosystem.md` |
-| **AutoML / 调参** | 超参搜索 + 评估闭环（向导 / 早停 / 学习曲线 / 评分节点蒸馏）| `08-roadmap.md`、`12-node-ecosystem.md` |
+| **AutoML / 调参** | 超参搜索 + 评估闭环（向导 / 早停 / 学习曲线 / 限值直评）| `08-roadmap.md`、`12-node-ecosystem.md` |
+| **质检落地三件套** | 评分器 / 制品库 / 检测记录（把高维特征用到实际检测）| `12-node-ecosystem.md`、`glossary/terms.md` |
 | **SKU ≠ 代码 edition** | 5 个商业 SKU，但代码只有 desktop/server/saas 三个 edition | `03-edition-comparison.md` |
 | **MCP-native（8 模块 / 70+ 工具）** | AI 客户端驱动平台全流程 | `11-mcp-ai-integration.md` |
 
