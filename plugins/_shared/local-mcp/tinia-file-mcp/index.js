@@ -14295,9 +14295,12 @@ async function uploadFileToDatasource(cfg, datasourceId, localPath, filenameOpt)
 
 // src/blob.ts
 import { createHash as createHash2 } from "node:crypto";
-import { writeFile as writeFile2 } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join as join2 } from "node:path";
+import { pipeline } from "node:stream/promises";
+import { Readable, Transform } from "node:stream";
 function sniffFormat(buf) {
   const b = buf;
   if (b.length >= 4 && b[0] === 80 && b[1] === 75 && b[2] === 3 && b[3] === 4) {
@@ -14338,22 +14341,58 @@ async function fetchBlob(baseUrl, accessToken, blobUri, opts = {}) {
 uri=${blobUri}
 ${body.slice(0, 500)}`);
   }
-  const buf = Buffer.from(await res.arrayBuffer());
-  const { format, hint } = sniffFormat(buf);
-  const sha256 = createHash2("sha256").update(buf).digest("hex");
+  if (!res.body) throw new Error(`blob \u8BFB\u53D6\u5931\u8D25: \u54CD\u5E94\u65E0 body
+uri=${blobUri}`);
+  const declared = Number(res.headers.get("content-length") || 0) || void 0;
+  const tmpPath = (opts.savePath || join2(tmpdir(), `tinia-blob-${Date.now().toString(36)}`)) + ".part";
+  const hasher = createHash2("sha256");
+  let size = 0;
+  let head = null;
+  const inline = [];
+  let lastLogged = 0;
+  const tap = new Transform({
+    transform(chunk, _enc, cb) {
+      hasher.update(chunk);
+      size += chunk.length;
+      if (!head) head = Buffer.from(chunk.subarray(0, 64));
+      if (opts.includeBase64 && size <= INLINE_LIMIT) inline.push(Buffer.from(chunk));
+      if (size - lastLogged >= 32 * 1024 * 1024) {
+        lastLogged = size;
+        const pct = declared ? ` (${(size / declared * 100).toFixed(0)}%)` : "";
+        log(`fetch_blob \u8FDB\u5EA6 ${(size / 1048576).toFixed(0)}MB${pct}`);
+      }
+      cb(null, chunk);
+    }
+  });
+  try {
+    await pipeline(Readable.fromWeb(res.body), tap, createWriteStream(tmpPath));
+  } catch (e) {
+    throw new Error(
+      `blob \u4E0B\u8F7D\u4E2D\u65AD\uFF08\u5DF2\u5199 ${(size / 1048576).toFixed(1)}MB${declared ? ` / \u5171 ${(declared / 1048576).toFixed(1)}MB` : ""}\uFF09: ${e instanceof Error ? e.message : String(e)}
+uri=${blobUri}
+\u534A\u6210\u54C1: ${tmpPath}`
+    );
+  }
+  if (declared && size !== declared) {
+    await rm(tmpPath, { force: true });
+    throw new Error(`blob \u4E0B\u8F7D\u4E0D\u5B8C\u6574: \u6536\u5230 ${size} \u5B57\u8282\uFF0CContent-Length \u58F0\u660E ${declared}
+uri=${blobUri}`);
+  }
+  const { format, hint } = sniffFormat(head ?? Buffer.alloc(0));
+  const sha256 = hasher.digest("hex");
   const ext = format === "unknown" ? "bin" : format;
   const savePath = opts.savePath || join2(tmpdir(), `tinia-blob-${sha256.slice(0, 16)}.${ext}`);
-  await writeFile2(savePath, buf);
+  await rename(tmpPath, savePath);
   const result = {
     blob_uri: blobUri,
-    size_bytes: buf.length,
+    size_bytes: size,
     format,
     format_hint: hint,
     sha256,
     saved_path: savePath
   };
-  if (opts.includeBase64 && buf.length <= INLINE_LIMIT) {
-    result.base64 = buf.toString("base64");
+  if (opts.includeBase64 && size <= INLINE_LIMIT) {
+    result.base64 = Buffer.concat(inline).toString("base64");
   }
   return result;
 }
