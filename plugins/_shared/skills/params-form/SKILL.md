@@ -271,6 +271,7 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `@/lib/utils` | `cn`（Tailwind class 合并） |
 | `@/api/client` | `api.get` / `api.post` 等调 Tinia 主 API |
 | `@/lib/three-bundle` | three.js 聚合（THREE + OrbitControls + EffectComposer + Bloom，3D 视图用） |
+| `@/lib/nodeParamsBus` | `publishNodeParams` —— 查看器里改了参数，回写给画布上的节点（如有效段查看器的「查看器内调参」） |
 | `@/components/ui/Select` | **下拉选择（shadcn 风格,表单首选）**：`Select / SelectTrigger / SelectValue / SelectContent / SelectItem / SelectGroup` |
 | `@/components/ui/SearchSelect` | 带搜索的下拉：`SearchSelect / SearchMultiSelect`（选项多时用,多选版带全选/反选） |
 | `@/components/ui/ColorPicker` | 取色：`ColorPicker`（色板/色盘 + 不透明度 + hex + 吸管 + 最近色） |
