@@ -8,9 +8,9 @@ allowed-tools: mcp__tinia__plugin_review_pending,mcp__tinia__plugin_review_detai
 
 # 审批组织内插件提交
 
-帮拥有 `plugins_publish_review` 权限的人审批插件提交。AI 的核心价值：**逐文件读源码**，按 [plugin-design-spec.md §9 安全准则](../../../docs/plugin-design-spec.md#9-安全准则审批人必读)做代码审计 + 设计规范检查。
+帮拥有 `plugins_publish_review` 权限的人审批插件提交。AI 的核心价值：**逐文件读源码**，按 [§9 安全准则](./references/security-checklist.md) 做代码审计 + 设计规范检查。
 
-> **本 skill 必读**：[../../../docs/plugin-design-spec.md](../../../docs/plugin-design-spec.md) — 安全准则 + checklist 章节
+> **本 skill 必读**：[references/security-checklist.md](./references/security-checklist.md) — 危险 import / 网络访问 / 文件系统的判定标准
 
 ---
 
@@ -57,7 +57,7 @@ AI 检查：
 按这个顺序读：
 
 1. **`tinia-repo.yaml`** — 字段齐？namespace 不是 bestfunc？
-2. **每个 `nodes/*/node.yaml`** — key 合法？inputs/outputs 类型对（详见 [§4](../../../docs/plugin-design-spec.md#4-类型系统)）？runtime 字段齐？
+2. **每个 `nodes/*/node.yaml`** — key 合法？inputs/outputs 类型对（类型系统见 types-reference skill）？runtime 字段齐？
 3. **每个 `nodes/*/runtime/run.py`** — 重点！按 §9 安全准则审计：
    - 危险 import：`os.system` / `subprocess` / `eval` / `exec` / `pickle.loads` / `__import__`(string) / `ctypes` → ❌
    - 网络：除 `rt.fetch_*` / `rt.upload_*` 外的 `urllib` / `requests` / `socket` → ❌（除非合法说明）
@@ -146,7 +146,7 @@ plugin_review_reject(
     comment="""
 拒绝理由：
 
-1. 【安全】run.py:23 用 subprocess 调 ffmpeg —— 不允许（详见 docs/plugin-design-spec.md §9.1）。
+1. 【安全】run.py:23 用 subprocess 调 ffmpeg —— 不允许（详见 references/security-checklist.md §9.1）。
    建议改用 librosa.load() 或 soundfile.read()。
 
 2. 【建议】readme 缺"已知限制"章节，建议补充支持的采样率范围。
@@ -196,6 +196,7 @@ plugin_review_reject(
 
 ## 相关 Skill
 
-- 设计规范（必读） → `../../../docs/plugin-design-spec.md`（主仓库）
+- 安全准则（必读） → `./references/security-checklist.md`
+- 完整设计规范 → 主仓 `docs/plugin-design-spec.md`（仅本地开发可读；安装版够不着，关键部分已摘进上面那份）
 - 类型体系 → `types-reference`
 - SDK 接口 → `sdk-reference`
