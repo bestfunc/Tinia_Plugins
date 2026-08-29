@@ -13,7 +13,7 @@ Tinia 声学数据分析平台的 AI 开发助手 plugin 市场，支持 Claude 
 | **`tinia-desktop`** | 桌面单机版（Windows / macOS 装 Tinia.exe / Tinia.app） | `http://localhost:18720/api/v1/mcp` |
 | **`tinia-local`** | 本地开发（`./start-dev.sh` 跑着） | `http://localhost:18722/api/v1/mcp` |
 
-> 四个变体共享同一组 16 个 skill（git symlink 到 `_shared`），仅 MCP server 地址不同。
+> 四个变体共享同一组 23 个 skill（git symlink 到 `_shared`），仅 MCP server 地址不同。
 > `tinia-desktop` vs `tinia-local`：前者是装机版桌面 daemon（端口 18720），后者是开发者跑 `./start-dev.sh` 的 Vite dev（端口 18722），互不冲突可同时装。
 
 ## 这是什么

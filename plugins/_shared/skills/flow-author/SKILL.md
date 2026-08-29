@@ -3,7 +3,7 @@ name: flow-author
 display_name: 搭建分析流程
 description: 在 Tinia 分析流程模块里搭建测试/分析流程：选数据源 → 加节点 → 连线 → 跑 → 看结果。配合开发者工具用于"开发完插件后立刻搭测试图验证"。
 user-invocable: true
-allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs,mcp__tinia__flow_runs_list
+allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs,mcp__tinia__flow_runs_list,mcp__tinia__templates_list,mcp__tinia__template_categories,mcp__tinia__template_copy,mcp__tinia__flow_versions,mcp__tinia__flow_fork,mcp__tinia__flow_run_cancel,mcp__tinia__flow_run_retry,mcp__tinia__nodepresets_list,mcp__tinia__nodepresets_save
 ---
 
 # flow-author —— 帮用户搭分析流程
@@ -17,6 +17,9 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 ## 标准动作链（每次都按这个顺序）
 
 ```
+0. templates_list             → **先问一句「有没有现成的」**。从模板起步比从空图连线快，
+                                模板通常是别人调好参数验证过的。有合适的 → template_copy
+                                复制一份再改（复制出来是独立流程，改它不影响模板）
 1. nodes_list                 → 看用户有哪些节点可用
 2. nodes_describe(目标节点, fields=["meta","ports","params"]) → 端口 + schema（不拉 readme/yaml）
 3. datasource_list            → 列候选数据源
@@ -32,11 +35,33 @@ allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nod
 10. 失败 →
     flow_node_logs(run_id, node_id) → status / error / traceback / **stderr 全文**
     flow_node_output_preview(出错节点) → 已成功输出 + 摘要
-    切回 dev_* 修代码 → dev_reload → 回到第 8 步
+    环境抖动 → flow_run_retry(run_id)（用当时的快照重跑，不用重建）
+    图有问题 → 切回 dev_* 修代码 → dev_reload → 回到第 8 步
+11. 跑偏了 / 用户喊停 → flow_run_cancel(run_id)
 ```
 
 > **不要分散调用 add_node × N + connect × N + set_params × N** —— 用 `flow_batch_edit` 一次提交。
 > 11 节点 + 10 边的流程从 22 次工具调用变 1 次，减少上下文切换 + 别名引用避免维护 n1/n2 编号。
+
+## 改别人的流程之前：先 fork
+
+平台的流程是**有版本的**，而且 `flow_batch_edit` 这类结构编辑会按拓扑 diff
+**自动分叉出新版本** —— 也就是说你一直在产生版本。
+
+- `flow_versions(flow_id)` 看这条流程有哪些版本、当前在哪一版
+- 动手改一条**用户已经在用**的流程前，先 `flow_fork` —— 版本列表里会留下一个
+  「AI 动手前的样子」，用户随时能回去。这比事后解释「我改坏了」有用得多
+- fork 之后**所有 flow_\* 都要用返回的新 flow_id**，别再对旧 id 操作
+- `flow_fork(from_run_id=...)` 能把「那次跑得好的配置」固化成一个版本
+
+自己刚建的空流程随便改，不必 fork。
+
+## 参数预设：别让用户重复说一遍
+
+- 用户说「按我上次那套配」「用我存的 A 计权预设」→ `nodepresets_list(class_type)`，
+  参数就在里面，直接喂 `flow_set_node_params`，不用再问一遍
+- 参数多、调了很久的节点（modulation_spectrum、active_segment 这类）调出好结果后，
+  可以问用户要不要 `nodepresets_save` 存下来。**问一句再存** —— 别擅自往人家账号里塞东西
 
 ## 节点发现：避免一次拉全量
 

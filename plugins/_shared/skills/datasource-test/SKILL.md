@@ -3,7 +3,7 @@ name: datasource-test
 display_name: 测试数据源 + 通道命名模板
 description: 端到端测试 Tinia 数据源功能 — 创建数据源、生成或上传多通道 wav、创建通道命名模板、应用模板、用流程节点验证 ChannelMeta 全链路传播。覆盖 Phase B 数据源页 UI + Phase C 通道命名模板系统。AI 用 Bash + Python 在本机生成 wav 写到 /tmp，再用 path 上传（无大小限制）；用户已有的本机 wav 也直接传 path 即可。
 user-invocable: true
-allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia-file__upload_file_to_datasource,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash
+allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia-file__upload_file_to_datasource,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash,mcp__tinia__datasource_types,mcp__tinia__datasource_browse_items,mcp__tinia__channel_semantics,mcp__tinia__channel_template_update
 ---
 
 # datasource-test —— 测试数据源 + 通道命名模板
@@ -38,7 +38,13 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
         ↓
 3. upload_file_to_datasource(datasource_id=ds_id, local_path="/tmp/test.wav")
         ↓
-4. channel_template_create({n_channels: N, channels: [...]})  ← 建模板
+4. channel_semantics()  ← **先查合法值再建模板**
+   quantity / unit / 灵敏度单位服务端有强校验（IsValidQuantity / IsValidUnit），
+   凭印象填几乎必被拒：声压的单位是 Pa 不是 dB，加速度可以 m/s² 或 g 但不能 mm/s
+        ↓
+   channel_template_create({n_channels: N, channels: [...]})  ← 建模板
+   建完发现某个通道名/单位不对 → channel_template_update（**别删了重建** ——
+   重建会换 id，已经引用它的数据源全部指空）
         ↓
 5. channel_template_apply(datasource_id, template_id)
         ↓
