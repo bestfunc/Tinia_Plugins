@@ -3,7 +3,7 @@ name: report-author
 display_name: 出分析报告
 description: 把流程跑出来的结果做成 Tinia 报告：挑样式模板 → 新建 → 把 run 的节点输出插进去 → 补文字说明 → 交付。也含「另存为报告应用」把一次性文档变成可换数据重跑的模板。
 user-invocable: true
-allowed-tools: mcp__tinia__report_list,mcp__tinia__report_create,mcp__tinia__report_get,mcp__tinia__report_open,mcp__tinia__report_delete,mcp__tinia__report_add_data,mcp__tinia__report_add_element,mcp__tinia__report_regenerate,mcp__tinia__report_save_as_app,mcp__tinia__report_template_list,mcp__tinia__report_template_get,mcp__tinia__flow_runs_list,mcp__tinia__flow_run_status,mcp__tinia__flow_describe,mcp__tinia__flow_node_output_preview
+allowed-tools: mcp__tinia__report_list,mcp__tinia__report_create,mcp__tinia__report_get,mcp__tinia__report_open,mcp__tinia__report_delete,mcp__tinia__report_add_data,mcp__tinia__report_add_element,mcp__tinia__report_add_page,mcp__tinia__report_regenerate,mcp__tinia__report_save_as_app,mcp__tinia__report_template_list,mcp__tinia__report_template_get,mcp__tinia__flow_runs_list,mcp__tinia__flow_run_status,mcp__tinia__flow_describe,mcp__tinia__flow_node_output_preview
 ---
 
 # report-author —— 把分析结果做成报告
@@ -32,12 +32,19 @@ allowed-tools: mcp__tinia__report_list,mcp__tinia__report_create,mcp__tinia__rep
 2. flow_describe(flow_id)          → 看图上有哪些节点、哪个是要展示的输出
 3. report_template_list            → 有哪些样式模板；按 ratio 过滤（16:9 演示 / a4-portrait 打印）
 4. report_template_get(template_id) → **看母版页结构**再决定往哪儿放（见下）
-5. report_create                   → 建报告，返回 id + target_path
-6. report_open                     → 让前端跳过去，用户能实时看着你往里填
-7. report_add_data × N             → 把每个要展示的节点输出插进去
-8. report_add_element × N          → 补标题、结论、说明文字
-9. [可选] report_save_as_app       → 要复用就转成应用
+5. report_create                   → 建报告，返回 id + target_path。**自动带一页空白页**
+6. report_open                     → 让前端跳过去，用户能看着你往里填
+7. report_add_page × N             → 需要第 2 页起时加页。带 page_template_key
+                                     就按母版建（会自带母版元素，见下）
+8. report_add_data × N             → 把每个要展示的节点输出插进去
+9. report_add_element × N          → 补标题、结论、说明文字
+10. [可选] report_save_as_app      → 要复用就转成应用
 ```
+
+> **页从哪来**：`report_create` 会带一页，所以单页报告直接进第 8 步。
+> 多页的话每页先 `report_add_page`。按母版建的页**自带母版元素**（标题框、装饰条），
+> 返回值里的 `element_count` 会告诉你这页不是空的 —— 往里加东西前先 `report_get`
+> 看一眼已经有什么，别叠上去。
 
 第 4 步别跳。`report_template_list` 只给 id/name/category/ratio 这些画廊字段，**看不到页面里已经有什么**。不看结构就往里塞元素，塞出来的图多半压在母版自带的标题或页眉上——用户看到的是「AI 排的版是乱的」。
 
