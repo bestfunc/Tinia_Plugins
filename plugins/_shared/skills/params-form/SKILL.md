@@ -271,12 +271,47 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `@/lib/utils` | `cn`（Tailwind class 合并） |
 | `@/api/client` | `api.get` / `api.post` 等调 Tinia 主 API |
 | `@/lib/three-bundle` | three.js 聚合（THREE + OrbitControls + EffectComposer + Bloom，3D 视图用） |
+| `@/lib/i18n` | **节点 UI 多语言**：`useNodeT(nodeKey)` 拿作用域化的 `t`，`useNodeLocale()` 拿当前语言。用法见下方「多语言」一节 |
 | `@/lib/nodeParamsBus` | `publishNodeParams` —— 查看器里改了参数，回写给画布上的节点（如有效段查看器的「查看器内调参」） |
 | `@/lib/upstreamChannels` | `useUpstreamChannels(dsIds)` —— 列出上游数据源有哪些通道（名字/物理量/单位）供勾选，替代让人手输通道索引。画布把 `upstreamDsIds` 注入节点 data，表单直接传进来即可；拿不到时返回空数组 + `reason`，**必须**有手输回退路径 |
 | `@/components/ui/Select` | **下拉选择（shadcn 风格,表单首选）**：`Select / SelectTrigger / SelectValue / SelectContent / SelectItem / SelectGroup` |
 | `@/components/ui/SearchSelect` | 带搜索的下拉：`SearchSelect / SearchMultiSelect`（选项多时用,多选版带全选/反选） |
 | `@/components/ui/ColorPicker` | 取色：`ColorPicker`（色板/色盘 + 不透明度 + hex + 吸管 + 最近色） |
 | `@/components/ui/ContextMenu` | 右键菜单：`ContextMenu` + `CtxItem` 类型（条目式，给 items 数组）；内容要放任意 ReactNode 时用 `useContextMenu()` |
+| `@/components/ui/DateTimePicker` | 日期时间选择：`DateTimePicker`（月历 + 时分，default 导出）+ `parseLocalDT` / `toLocalDT` |
+
+### 多语言（可选，纯增量）
+
+表单里的中文**照常直接写**。想让它支持英日，把字面量换成 `t(key, 中文原文)`：
+
+```tsx
+import { useNodeT } from '@/lib/i18n'
+
+export default function ParamsForm({ params, onChange }) {
+  const t = useNodeT('level_meter')          // 传自己的节点目录名（裸 key）
+  return <label>{t('band.title', '频带设置')}</label>
+}
+```
+
+**第二个参数就是中文原文，也是永远的兜底。** 不写任何 json 也能正常跑（显示中文）；
+要支持英日，再在节点目录下补：
+
+```
+nodes/level_meter/i18n/
+├── ui.en.json     { "band": { "title": "Band settings" } }   ← 嵌套或 "band.title" 扁平写法都行
+└── ui.ja.json     { "band.title": "帯域設定" }
+```
+
+逐条目回落 `ja → en → 中文原文`：ja 只译了六成，剩下四成各自落 en，不会整体退回中文。
+中文界面下**不发任何请求**，零成本。
+
+写在 `nodes/shared/` 里的公共组件用 **`useSharedT()`（无参）**，词典落在
+**仓库级** `<repo>/i18n/ui.<locale>.json` —— 那批串是整仓共用的，不属于某个节点。
+回落链与占位符跟 `useNodeT` 完全一致。
+
+节点的 `name` / `description` / 端口 `label` / 参数 `title` 不在这里 ——
+它们走 `i18n/<locale>.yaml` 与 `i18n/params.<locale>.json`，
+由后端解析后随 `/object_info` 下发。完整规范见主仓 `docs/i18n/plugin-i18n-spec.md`。
 
 **下拉用法**（与标准 shadcn 一致）：
 

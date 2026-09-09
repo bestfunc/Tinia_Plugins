@@ -152,6 +152,38 @@ else:
     print(json.dumps({"success": True}))
 ```
 
+## 多语言：仓库级覆盖层
+
+`tinia-repo.yaml` 里的可见文案（菜单 label、凭据/数据源类型名与字段 label、
+权限 label/group、采集驱动名）走**仓库级**旁挂层：
+
+```yaml
+# <repo>/i18n/repo.en.yaml —— 与源文件同构、稀疏，索引键一律用标识符
+modules:
+  menu_items:
+    /plugin/foo/credentials: { label: Credentials }
+  permissions:
+    foo_admin: { label: Administer, group: Foo }
+  credentials:
+    foo_basic:
+      name: Foo Basic Auth
+      fields:
+        host: { label: Server URL }
+```
+
+⛔ **绝不能翻的**（写了会被发布拦下）：
+
+- **顶层 `name`** —— 它同时是 **pluginID**，翻了插件页面按 plugin_id 匹配全部失配、菜单点进去白屏；
+- `namespace` / `table_prefix` / `menu_items.*.route` / `permissions.*.key` 与 `group_key` /
+  `credentials.*.id` 与 `fields.*.key` / `datasources.*.id` / `daq_drivers.*.id`；
+- `modules.templates.category`（会被建成分类表的一行并按 name 去重）与 `files.*`（包内路径）。
+
+**包内文件路径一律 ASCII** —— 现存有 `templates/随机抽样.tinpack` 这种中文文件名，
+文件名不是字段、加不了覆盖层，只能改名。
+
+改完刷新页面即可生效（按文件改动时间自动重读），不用重载插件。
+完整清单见主仓 `docs/i18n/plugin-i18n-spec.md` §5/§6。
+
 ## 常见坑
 
 - `namespace` 强烈建议显式声明；缺省时和官方节点冲突装不进去

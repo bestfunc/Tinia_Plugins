@@ -37,6 +37,38 @@ runtime:
   requirements: runtime/requirements.txt
 ```
 
+## 多语言：中文照写，译文旁挂
+
+`node.yaml` **永远写中文**（它是源语言）。要支持英日就在节点目录下加：
+
+```
+nodes/my_node/i18n/
+├── en.yaml            # 与 node.yaml 同构、稀疏，只写要翻的字段
+└── ja.yaml
+```
+
+```yaml
+# i18n/en.yaml
+name: My Node
+description: "..."
+inputs:
+  required:
+    data: { label: Input data }
+outputs:
+  result: { label: Analysis result }     # 注意 outputs 这里是**映射**不是数组
+```
+
+可翻的只有 `name` / `description` / 端口 `label` / `dynamic_*.label`。
+⛔ `key` / `category` / 端口 key / `type` / `channels_mode` / `runtime.driver_id`
+这些是**标识符**，翻了会让节点变「未知节点」、边全断、多通道策略静默失效 ——
+覆盖层里写了会被发布自检拦下。
+
+**`sub_name` 强烈建议填**：它是英文名的兜底（没有它英文界面掉回中文名）。
+**不拦发布**（自检里是 Warning）—— 但填了它的节点一行译文都不写就已经有了合格的英文名，
+是整套 i18n 里性价比最高的一行。
+
+完整指南：主仓 `docs/i18n/plugin-i18n-quickstart.md`。
+
 ## 字段详解
 
 ### `key`（必填，string）

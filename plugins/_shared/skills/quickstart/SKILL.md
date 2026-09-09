@@ -82,6 +82,13 @@ nodes_read_source(key, "runtime/run.py")         # 学 SDK 调用习惯（不抄
 - `dev_export` 拿到 tar.gz 的 base64 内容
 - 告诉用户"请下载后在 Tinia 的"节点仓库"页面点"离线安装"上传"
 
+## 多语言
+
+平台支持中/英/日，**中文是源语言**：照常写中文，译文旁挂在 `i18n/` 里，**可选**。
+写新节点时只需顺手做对两件事：`node.yaml` 填 `sub_name`（不拦发布，但一行换个英文节点名），
+`ui/*.tsx` 的中文用 `t(key, '中文原文')` 包一层（第二参数就是兜底，不写 json 也能跑）。
+详见 `create-node` / `node-yaml` skill 与主仓 `docs/i18n/plugin-i18n-quickstart.md`。
+
 ## 关键原则
 
 1. **不要盲写代码**。先确认端口类型 → 读骨架 → 改 TODO 区域 → 测试。每步告知用户。
