@@ -279,6 +279,38 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `@/components/ui/ColorPicker` | 取色：`ColorPicker`（色板/色盘 + 不透明度 + hex + 吸管 + 最近色） |
 | `@/components/ui/ContextMenu` | 右键菜单：`ContextMenu` + `CtxItem` 类型（条目式，给 items 数组）；内容要放任意 ReactNode 时用 `useContextMenu()` |
 | `@/components/ui/DateTimePicker` | 日期时间选择：`DateTimePicker`（月历 + 时分，default 导出）+ `parseLocalDT` / `toLocalDT` |
+| `@/components/ui/FieldHelp` | 参数旁的「?」帮助浮层：`FieldHelp`（default 导出，hover 展开 + 右上角一键复制）。长说明一律收进它 —— 见下方「说明写在哪」 |
+
+### 说明写在哪（★ 表单文案的统一规矩）
+
+参数表单的说明越写越长，最后一屏里真正要填的控件被挤成零星几行，而那些说明
+**大部分时候不需要看**（填过一次就记住了）。所以：**长说明收进 `?`，表单上只留填得下去所必需的那句。**
+
+```tsx
+import FieldHelp from '@/components/ui/FieldHelp'
+
+<label className={labelCls}>
+  检查哪条曲线
+  <FieldHelp title="检查哪条曲线">
+    一份数据里可能同时有 <b>vs_time</b>（时序）和 <b>vs_freq</b>（频谱）……
+  </FieldHelp>
+</label>
+```
+
+| 留在表单上 | 收进 `?` |
+|---|---|
+| 当前选择的**即时后果**（一行，随选择变化） | 原理 / 算法出处 / 公式 |
+| 单位、取值范围 | 「为什么这么设计」 |
+| 错误与警告（红黄字） | 踩过的坑、反直觉之处 |
+| 一句话点题 | 与下游的契约、字段清单 |
+
+**判据：遮住 `?` 还能不能把这个参数填对。** 能 → 收得对；不能 → 那句话得留在外面。
+没有这条判据，最后会把所有字都塞进 `?`，表单变成一排没有信息的光板 ——
+那不是简化，是把问题挪了个地方。
+
+`FieldHelp` 自己已经处理好 portal（不被面板裁剪）、边界翻转（不跑出屏幕）、
+`zoom-stable`（界面缩放下不偏移）与鼠标在「? → 浮层」路上的连续性，直接用即可。
+样板见 `spec_limit_check` 的 `ui/ParamsForm.tsx`。
 
 ### 多语言（可选，纯增量）
 
