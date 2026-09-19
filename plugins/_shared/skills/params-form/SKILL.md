@@ -256,6 +256,14 @@ const set = (k: string, v: any) => onChange({ ...params, [k]: v })
 
 永远整体替换（spread 保留其他字段），不要原地改 params 对象。
 
+> **这条写法还是平台「从表单点选」的基础**（Tinia v1.48+）：属性面板「参数」页会把你的表单
+> 渲染在一份副本上，接管 `onChange`，**比较前后差异**来认出用户想让外部覆盖的是哪个参数。
+> 所以：
+> - 一个控件只改它自己的那个参数；需要联动时（改目标值反推 n_fft）照常一起写，平台会把
+>   变化的几个都列出来让用户挑，并提示「这几个是联动的」；
+> - 挂载时在 `useEffect` 里补默认值/迁旧键可以，平台只认**用户动过之后**的回写；
+> - 别在 `onChange` 之外偷偷改状态让表单显示和 params 对不上 —— 点选看的是 params 的差异。
+
 ### 可用依赖（白名单）
 
 dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）：
@@ -613,6 +621,19 @@ const inputCls = 'w-full h-8 bg-input border border-border rounded px-2 text-sm'
   "required": ["strategy", "count"]
 }
 ```
+
+**哪些参数不让外部覆盖**：节点默认所有 schema 参数都可以被「参数」口覆盖（见 node-yaml skill
+的 `param_override`）。改了会让结果/模型对不上、或必须跟别的参数一起改的，标
+`"x-tinia-overridable": false`：
+
+```json
+"mode":     { "type": "string", "enum": ["manual", "knots"], "x-tinia-overridable": false },
+"category": { "type": "string", "x-tinia-overridable": false }
+```
+
+典型：切换后要连带转换别的参数的「模式」、决定另一个参数取值范围的「类别」、
+由别的参数反推出来的派生值、训练产物 id。覆盖值会按 `enum` / `minimum` / `maximum` 校验，
+所以约束写进 schema 比只写在表单里更可靠。
 
 Python 侧永远用 `get` + 默认值兜底：
 
