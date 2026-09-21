@@ -288,6 +288,7 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `@/components/ui/ContextMenu` | 右键菜单：`ContextMenu` + `CtxItem` 类型（条目式，给 items 数组）；内容要放任意 ReactNode 时用 `useContextMenu()` |
 | `@/components/ui/DateTimePicker` | 日期时间选择：`DateTimePicker`（月历 + 时分，default 导出）+ `parseLocalDT` / `toLocalDT` |
 | `@/components/ui/FieldHelp` | 参数旁的「?」帮助浮层：`FieldHelp`（default 导出，hover 展开 + 右上角一键复制）。长说明一律收进它 —— 见下方「说明写在哪」 |
+| `@/components/charts/ScatterExplorer` | 可探索的 2D 散点图：`ScatterExplorer`（default 导出；框选 / 滚轮缩放 / 拖拽平移 / 悬浮 / 点选 / 右键菜单，交互同「聚类探索」），外加 `SERIES_COLORS` / `escapeHtml` / `clip` / `themeColor`。点怎么分系列、悬浮显示什么由调用方给。⚠ 需要主程序 v1.48 及以上，更旧的主程序上这个 import 会编译失败、回落到打包时的旧界面 |
 
 ### 说明写在哪（★ 表单文案的统一规矩）
 
