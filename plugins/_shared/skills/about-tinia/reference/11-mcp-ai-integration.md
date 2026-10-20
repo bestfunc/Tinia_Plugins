@@ -144,7 +144,7 @@ OAuth scope 控制工具可见性，scope = `mcp:<module>`，共 8 个，由 use
   ├─ tinia          → Tinia Server /api/v1/mcp    远程 HTTP，OAuth + Bearer
   │                  70+ 工具：dev / nodes / graphs / data / data_write / templates / assistant / plugins
   │
-  └─ tinia-file     → 本机 stdio 进程：`tinia mcp file`（Tinia 命令行程序的子命令）
+  └─ tinia-file     → 本机 stdio 进程：`tinia-local-mcp file`（随 Tinia 分发的本地 MCP 程序）
                       1 工具：upload_file_to_datasource
                       用 OAuth access_token 走 multipart POST → /api/v1/mcp_data
 ```
@@ -152,7 +152,7 @@ OAuth scope 控制工具可见性，scope = `mcp:<module>`，共 8 个，由 use
 **为什么拆**：
 
 - 主 MCP 走 JSON-RPC over HTTP，不适合 multipart 大文件上传（远程 base64 编码 + 网络往返耗时）
-- tinia-file MCP 跑在本机（`tinia mcp file`），能直接走 multipart 流式上传到 daemon；旧版插件用的是 node 版（`@bestfunc-com/tinia-file-mcp`），工具相同
+- tinia-file MCP 跑在本机（`tinia-local-mcp file`），能直接走 multipart 流式上传到 daemon；旧版插件用的是 node 版（`@bestfunc-com/tinia-file-mcp`），工具相同
 - 鉴权用同一套 OAuth，用户无感
 
 ### 免授权直连（桌面本机）

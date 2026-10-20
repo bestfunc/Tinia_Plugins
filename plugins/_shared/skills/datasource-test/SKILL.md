@@ -20,12 +20,12 @@ metadata:
 
 ## 上传走本地 MCP（任何部署都可用）
 
-文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（由 Tinia 命令行程序的子命令 `tinia mcp file` 提供，单二进制、不依赖 Node / Python）。原因：
+文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（由随 Tinia 分发的本地 MCP 程序 `tinia-local-mcp file` 提供，单二进制、不依赖 Node / Python）。原因：
 
 - 远程 MCP（连 Tinia Server）看不到 AI 本机文件 — 在 SaaS 部署直接没法上传
 - MCP 协议层 base64 内联占 AI context 太重 — 大 NVH 录音 OOM
 
-实现：AI 客户端以 stdio 方式启动 `tinia mcp file`（客户端配置里写 `tinia` 的绝对路径），HTTP multipart 直传 server 现有的 `/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**（saas / onprem / 本地 dev）。
+实现：AI 客户端以 stdio 方式启动 `tinia-local-mcp file`（客户端配置里写 `tinia-local-mcp` 的绝对路径），HTTP multipart 直传 server 现有的 `/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**（saas / onprem / 本地 dev）。
 
 旧版插件用的是 node 版：`${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js`（esbuild bundle，源码在 [Tinia_Local_MCP](https://github.com/bestfunc/Tinia_Local_MCP)）通过 `node` 启动，工具名不变。
 
