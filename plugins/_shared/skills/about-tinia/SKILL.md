@@ -20,7 +20,7 @@ metadata:
 
 本地装的 skill 可能比所连的 Tinia 旧。每次会话开始，先调一次 `tinia` MCP 的 `agentport_status`：
 
-1. 读本地 skill 包的索引：`~/.agents/skills/.agentport-skills.json`，没有就读 `~/.claude/skills/.agentport-skills.json`，取其中的 `sha256`。
+1. 读本地 skill 包的索引 `.agentport-tinia.json`，取其中的 `sha256`。按顺序找，读到第一个就停：`~/.agents/skills/`、`~/.config/opencode/skills/`、`~/.claude/skills/`、`~/.tinia/agentport/claude-marketplace/`（Claude Code 插件方式安装时在这里）。
 2. 调 `agentport_status(local_skills_sha256=<上一步的 sha256>)`；两个文件都读不到就不传这个参数。
 3. 返回里说本地与服务端不一致（或 skill 已过期）时，告诉用户：本地 skill 与 Tinia 版本对不上，请按返回的 `install_url` 重新同步。不要自己改写本地 skill 目录。
 
