@@ -12,22 +12,22 @@
     {
       "name": "tinia",
       "source": "./plugins/tinia",
-      "description": "【SaaS 版】tinia-saas.bestfunc.com — 用 Tinia 的公网账号开发插件。16 个 AI skill + OAuth 自动授权 MCP connector。"
+      "description": "【SaaS 版】tinia-saas.bestfunc.com — 用 Tinia 的公网账号开发插件。23 个 AI skill + OAuth 自动授权 MCP connector。"
     },
     {
       "name": "tinia-onprem",
       "source": "./plugins/tinia-onprem",
-      "description": "【公司私有化版】t.bestfunc.com — 公司内网部署的 Tinia 实例。16 个 AI skill + OAuth 自动授权 MCP connector。"
+      "description": "【公司私有化版】t.bestfunc.com — 公司内网部署的 Tinia 实例。23 个 AI skill + OAuth 自动授权 MCP connector。"
     },
     {
       "name": "tinia-desktop",
       "source": "./plugins/tinia-desktop",
-      "description": "【桌面单机版】localhost:18720 — Windows / macOS 装的 Tinia 桌面 app 内嵌 daemon。开箱即用，无需联网。16 个 AI skill + OAuth 自动授权 MCP connector。"
+      "description": "【桌面单机版】localhost:18720 — Windows / macOS 装的 Tinia 桌面 app 内嵌 daemon。开箱即用，无需联网。23 个 AI skill + OAuth 自动授权 MCP connector。"
     },
     {
       "name": "tinia-local",
       "source": "./plugins/tinia-local",
-      "description": "【本地开发版】localhost:18722 — 跑 ./start-dev.sh 时连本机 Vite dev。仅给 Tinia 主仓库贡献者用。16 个 AI skill + OAuth 自动授权 MCP connector。"
+      "description": "【本地开发版】localhost:18722 — 跑 ./start-dev.sh 时连本机 Vite dev。仅给 Tinia 主仓库贡献者用。23 个 AI skill + OAuth 自动授权 MCP connector。"
     }
   ]
 }

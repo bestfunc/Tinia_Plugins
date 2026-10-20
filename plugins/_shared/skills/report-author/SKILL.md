@@ -4,6 +4,9 @@ display_name: 出分析报告
 description: 把流程跑出来的结果做成 Tinia 报告：挑样式模板 → 新建 → 把 run 的节点输出插进去 → 补文字说明 → 交付。也含「另存为报告应用」把一次性文档变成可换数据重跑的模板。
 user-invocable: true
 allowed-tools: mcp__tinia__report_list,mcp__tinia__report_create,mcp__tinia__report_get,mcp__tinia__report_open,mcp__tinia__report_delete,mcp__tinia__report_add_data,mcp__tinia__report_add_element,mcp__tinia__report_add_page,mcp__tinia__report_regenerate,mcp__tinia__report_save_as_app,mcp__tinia__report_template_list,mcp__tinia__report_template_get,mcp__tinia__flow_runs_list,mcp__tinia__flow_run_status,mcp__tinia__flow_describe,mcp__tinia__flow_node_output_preview
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # report-author —— 把分析结果做成报告

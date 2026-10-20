@@ -4,6 +4,9 @@ display_name: 打包导出 .tar.gz（辅助路径）
 description: 把开发完的插件导出成 .tar.gz —— 用于离线传输 / 自托管代码仓库。**主流发布请用 /publish-plugin** 走商店审批。
 user-invocable: true
 allowed-tools: mcp__tinia__dev_get_project,mcp__tinia__dev_bump_version,mcp__tinia__dev_export
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 打包导出 .tar.gz（辅助路径）

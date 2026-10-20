@@ -4,6 +4,9 @@ display_name: 拉取 blob 输出并解码导出（fetch_blob → npz/矩阵 → 
 description: 节点输出里 FeatureMatrix / 频谱矩阵端口的真实数值在内层 blob（numpy .npz）里，flow_node_output_preview 只给「信封」（每行的 local_uri）。本 skill 教怎么用 fetch_blob 把 local_uri 拉到本机、np.load 解码、导出 CSV。用户说「导出某节点矩阵/频谱数据」「把 mod_matrix / depth_matrix 存成 csv」「拿 blob 里的原始数值」时用。
 user-invocable: false
 allowed-tools: mcp__tinia__flow_describe,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_runs_list,mcp__tinia-file__fetch_blob,Bash
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 拉取 blob 输出并解码导出

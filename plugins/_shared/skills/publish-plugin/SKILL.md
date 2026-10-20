@@ -4,6 +4,9 @@ display_name: 发布插件到商店
 description: 帮用户把开发完的插件提交到组织商店或在线商店 —— AI 起草元数据 / 写 README / 据上版本 diff 写 changelog → 推到前端表单让用户 review → 提交审批
 user-invocable: true
 allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_get_project,mcp__tinia__dev_read_file,mcp__tinia__dev_tree,mcp__tinia__plugin_publish_self_check,mcp__tinia__plugin_diff_last_published,mcp__tinia__plugin_publish_draft,mcp__tinia__plugin_my_submissions
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 发布插件到商店

@@ -4,6 +4,9 @@ display_name: 搭建分析流程
 description: 在 Tinia 分析流程模块里搭建测试/分析流程：选数据源 → 加节点 → 连线 → 跑 → 看结果。配合开发者工具用于"开发完插件后立刻搭测试图验证"。
 user-invocable: true
 allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_list_types,mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__flow_create,mcp__tinia__flow_list,mcp__tinia__flow_describe,mcp__tinia__flow_open,mcp__tinia__flow_batch_edit,mcp__tinia__flow_add_node,mcp__tinia__flow_remove_node,mcp__tinia__flow_set_node_params,mcp__tinia__flow_connect,mcp__tinia__flow_remove_edge,mcp__tinia__flow_replace_node,mcp__tinia__flow_auto_layout,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_run_status,mcp__tinia__flow_node_output_preview,mcp__tinia__flow_node_logs,mcp__tinia__flow_runs_list,mcp__tinia__templates_list,mcp__tinia__template_categories,mcp__tinia__template_copy,mcp__tinia__flow_versions,mcp__tinia__flow_fork,mcp__tinia__flow_run_cancel,mcp__tinia__flow_run_retry,mcp__tinia__nodepresets_list,mcp__tinia__nodepresets_save
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # flow-author —— 帮用户搭分析流程

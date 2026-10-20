@@ -3,6 +3,9 @@ name: params-form
 display_name: 节点参数表单（下拉/开关/滑块/条件字段）
 description: 节点在图编辑器右侧参数面板怎么渲染 —— 默认只有输入框，想要下拉/开关/条件显示必须写 ui/ParamsForm.tsx
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 节点参数表单：默认渲染 + 自定义 UI

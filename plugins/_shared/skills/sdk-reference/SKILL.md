@@ -3,6 +3,9 @@ name: sdk-reference
 display_name: Tinia SDK 参考
 description: tinia_runtime（Runtime / ChunkRuntime）完整 API 参考 —— 节点 run.py 必用；附 tinia_sdk（外部程序调用平台）速查
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # Tinia SDK 参考（`tinia_runtime`）

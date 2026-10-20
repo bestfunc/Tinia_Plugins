@@ -3,6 +3,9 @@ name: node-yaml
 display_name: node.yaml 字段速查
 description: Tinia 节点清单（node.yaml）的所有字段含义 + 典型取值 + 默认行为
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # `node.yaml` 字段速查

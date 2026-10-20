@@ -3,6 +3,9 @@ name: tinia-repo-yaml
 display_name: tinia-repo.yaml 字段速查
 description: Tinia 插件级 manifest（tinia-repo.yaml）的所有字段 —— 命名空间、modules、migrations、模版
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # `tinia-repo.yaml` 字段速查
