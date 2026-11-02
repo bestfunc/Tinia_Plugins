@@ -3,13 +3,29 @@ name: about-tinia
 display_name: Tinia 产品百科
 description: Tinia 声学/振动/NVH 数据分析平台的方方面面 —— 给开发同事 / 销售同事 / 业务同事查阅。涵盖产品定位、架构、商业模式、对比、客户场景、技术栈、路线图、术语表。能根据业务需求给出使用建议。
 user-invocable: true
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # Tinia 产品百科
 
 这是 Tinia 的**自助百科**。无论你是开发同事、销售同事、业务同事，还是给客户做评估的 AI，都能从这里查到全部产品知识，并根据业务场景给出合理建议。
 
-不写代码 / 不调用工具。如果需要写代码，去用 `quickstart` / `create-node` / `flow-author` 等开发类 skill。
+不写代码 / 不调用工具（下面的版本自检除外）。如果需要写代码，去用 `quickstart` / `create-node` / `flow-author` 等开发类 skill。
+
+---
+
+## 会话开始先做版本自检
+
+本地装的 skill 可能比所连的 Tinia 旧。每次会话开始，先调一次 `tinia` MCP 的 `agentport_status`：
+
+1. 读本地 skill 包的索引 `.agentport-tinia.json`，取其中的 `sha256`。按顺序找，读到第一个就停：`~/.agents/skills/`、`~/.config/opencode/skills/`、`~/.claude/skills/`、`~/.tinia/agentport/claude-marketplace/`（Claude Code 插件方式安装时在这里）。
+2. 能执行命令时，再取本地 MCP 程序的版本：运行 `~/.tinia/bin/tinia-local-mcp --version`（Windows：`%USERPROFILE%\.tinia\bin\tinia-local-mcp.exe --version`），没装就跳过。
+3. 调 `agentport_status(local_skills_sha256=<第 1 步的 sha256>, local_cli_version=<第 2 步的输出>)`；哪个取不到就不传哪个参数。
+4. 返回里说本地与服务端不一致（或 skill 已过期）时，告诉用户：本地 skill 与 Tinia 版本对不上，请按返回的 `install_url` 重新同步。不要自己改写本地 skill 目录。
+
+本地没装 skill（只配了远程 MCP）时，用 `tinia` MCP 的 `list_skills` 查有哪些说明书，用 `get_skill(name, path)` 取全文（`path` 缺省为 `SKILL.md`，附件如 `reference/…` 也用它取）。
 
 ---
 

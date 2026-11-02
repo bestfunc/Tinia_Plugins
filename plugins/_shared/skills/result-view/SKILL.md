@@ -4,6 +4,9 @@ display_name: 节点结果视图（Viewer.tsx / ViewerLoader.tsx）
 description: 节点跑完后用户点"查看数据"看到的视图怎么写 —— 按数据类型给完整模板，强制要求先读官方源码学风格
 user-invocable: false
 allowed-tools: mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_read_source,mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__dev_glob_files,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 节点结果视图：按数据类型选模板 + 强制看官方实现
@@ -285,6 +288,24 @@ function ViewBtn({ icon: Icon, active, onClick, label }: any) {
 ```
 
 ---
+
+## 多语言：查看器里的中文同样走 `t()`
+
+查看器（Viewer / ViewerLoader）和参数表单一样，界面中文用 `t(key, '中文原文')` 包一层：
+
+```tsx
+import { useNodeT } from '@/lib/i18n'
+const t = useNodeT('my_node')
+<button>{t('view.stacked', '层叠视图')}</button>
+```
+
+第二个参数就是中文原文，也是永远的兜底 —— 不写任何 json 照样显示中文。
+词典在 `nodes/<key>/i18n/ui.<locale>.json`。
+写在 `nodes/shared/` 里的公共图表组件用 `useSharedT()`（无参）。
+
+⚠ **图例 / 坐标轴名是翻译重灾区**：英文平均比中文长 60~100%，
+图例统一改成可换行 / 可滚动，轴名过长时缩写 + tooltip。
+带数字的句子用占位符（`t('n.items', '{{n}} 条', { n })`），**不要拼字符串**。
 
 ## 数据类型 ↔ 推荐图表库
 

@@ -4,6 +4,9 @@ display_name: 发布插件到商店
 description: 帮用户把开发完的插件提交到组织商店或在线商店 —— AI 起草元数据 / 写 README / 据上版本 diff 写 changelog → 推到前端表单让用户 review → 提交审批
 user-invocable: true
 allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_get_project,mcp__tinia__dev_read_file,mcp__tinia__dev_tree,mcp__tinia__plugin_publish_self_check,mcp__tinia__plugin_diff_last_published,mcp__tinia__plugin_publish_draft,mcp__tinia__plugin_my_submissions
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 发布插件到商店
@@ -144,6 +147,19 @@ plugin_my_submissions
 返回我的提交列表 + 状态（pending / approved / rejected / withdrawn）。告诉用户："已进审批队列。审批人通过后，订阅者就能用了。"
 
 ---
+
+## 多语言自检（`plugin_publish_self_check` 返回里的 `i18n` 段）
+
+- **`i18n.blocking` 非空 = 发布会被拒**，只有一类：
+  翻译覆盖层动了**标识符字段**（节点 key / category / 端口 key / 枚举值 /
+  `x-tinia-group` / `tinia-repo.yaml` 顶层 name …）—— 照每条的「正确做法」改。
+  它的表现不是"显示成英文"，而是分组裂开 / 路由失配 / 边找不到端口，
+  上线才炸、报错还指不到原因，所以挡在发布口。
+- **`i18n.warnings` 不拦发布**：缺 en / ja 译文是正常状态，会逐条回落到中文；
+  某个节点**缺 `sub_name`** 也在这里 —— 补一行很划算，但不补照样发得出去。
+
+**这两者的区别要跟用户讲清楚：缺翻译不是错误，翻错东西才是。**
+不要因为覆盖率不到 100% 就劝用户先翻完再发。
 
 ## 关键原则
 

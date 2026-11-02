@@ -3,6 +3,9 @@ name: pick-template
 display_name: 从模板开始
 description: Tinia Developer Studio 的 4 个项目模板各自生成什么、适合什么场景、怎么选
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 从模板开始

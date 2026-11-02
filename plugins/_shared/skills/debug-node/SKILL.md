@@ -4,6 +4,9 @@ display_name: 调试节点运行错误
 description: dev_reload 失败或节点测试出错时的排查流程
 user-invocable: true
 allowed-tools: mcp__tinia__dev_reload,mcp__tinia__dev_compile,mcp__tinia__dev_build_status,mcp__tinia__dev_build_history,mcp__tinia__dev_tail_logs,mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__dev_glob_files,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_tree,mcp__tinia__nodes_describe
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 调试节点运行错误

@@ -3,6 +3,9 @@ name: node-yaml
 display_name: node.yaml 字段速查
 description: Tinia 节点清单（node.yaml）的所有字段含义 + 典型取值 + 默认行为
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # `node.yaml` 字段速查
@@ -36,6 +39,38 @@ runtime:
   entrypoint: runtime/run.py
   requirements: runtime/requirements.txt
 ```
+
+## 多语言：中文照写，译文旁挂
+
+`node.yaml` **永远写中文**（它是源语言）。要支持英日就在节点目录下加：
+
+```
+nodes/my_node/i18n/
+├── en.yaml            # 与 node.yaml 同构、稀疏，只写要翻的字段
+└── ja.yaml
+```
+
+```yaml
+# i18n/en.yaml
+name: My Node
+description: "..."
+inputs:
+  required:
+    data: { label: Input data }
+outputs:
+  result: { label: Analysis result }     # 注意 outputs 这里是**映射**不是数组
+```
+
+可翻的只有 `name` / `description` / 端口 `label` / `dynamic_*.label`。
+⛔ `key` / `category` / 端口 key / `type` / `channels_mode` / `runtime.driver_id`
+这些是**标识符**，翻了会让节点变「未知节点」、边全断、多通道策略静默失效 ——
+覆盖层里写了会被发布自检拦下。
+
+**`sub_name` 强烈建议填**：它是英文名的兜底（没有它英文界面掉回中文名）。
+**不拦发布**（自检里是 Warning）—— 但填了它的节点一行译文都不写就已经有了合格的英文名，
+是整套 i18n 里性价比最高的一行。
+
+完整指南：主仓 `docs/i18n/plugin-i18n-quickstart.md`。
 
 ## 字段详解
 
@@ -117,6 +152,20 @@ outputs:
     label: "频谱图"
 ```
 
+Json 口可以加 `json_fields`，声明这个口吐出哪些**顶层键**（Tinia v1.48+）。
+下游把它连进自己的「参数」口时，外部键能从下拉里选，而不是照着你的代码手抄键名
+（抄错了不报错，只是永远不生效）：
+
+```yaml
+outputs:
+  - key: line_config
+    type: Json
+    label: "产线参数"
+    json_fields:
+      - {key: line_threshold, title: 产线阈值, type: number}
+      - {key: window, title: 窗函数, type: string}
+```
+
 ### `dynamic_inputs`（object，可选）
 
 动态端口（前端 +/- 按钮加端口）：
@@ -161,6 +210,30 @@ JSON Schema 文件路径。前端用 @rjsf/core 渲染表单，值传入 `rt.tas
   }
 }
 ```
+
+### `param_override`（bool，可选；「参数」输入口）
+
+Tinia v1.48+ 起，节点**默认**带一个「参数」输入口（key 固定为 `params`，由平台追加，
+不要自己在 inputs 里写）。流程作者把外部值（通常是 API 输入的扩展属性）连进来，
+在属性面板「参数」页配好「哪个外部键覆盖哪个参数」，运行时就用外部值替换对应参数。
+**节点代码不用改** —— 覆盖发生在平台执行器里，`rt.task["params"]` 拿到的已经是覆盖后的值。
+
+默认规则：
+
+| category | 默认 |
+|---|---|
+| `analysis` / `preprocess` / `transform` / `feature` / `ai` | 开（且 schema 里至少有一个可覆盖参数） |
+| `source` / `capture` / `viewer` / `output` / 其它 | 关 |
+
+显式表态以声明为准：
+
+```yaml
+param_override: false   # 这个节点的参数不该被外部换掉
+param_override: true    # 查看器/输出类也想开
+```
+
+**单个参数关掉**用 schema 的 `x-tinia-overridable: false`（见 params-form skill）。
+覆盖值会按 schema 的 `type` 转换、按 `enum` / `minimum` / `maximum` 校验，不合法就让节点失败并指出是哪个外部键。
 
 ### `runtime`（object，必填）
 

@@ -4,6 +4,9 @@ display_name: 测试数据源 + 通道命名模板
 description: 端到端测试 Tinia 数据源功能 — 创建数据源、生成或上传多通道 wav、创建通道命名模板、应用模板、用流程节点验证 ChannelMeta 全链路传播。覆盖 Phase B 数据源页 UI + Phase C 通道命名模板系统。AI 用 Bash + Python 在本机生成 wav 写到 /tmp，再用 path 上传（无大小限制）；用户已有的本机 wav 也直接传 path 即可。
 user-invocable: true
 allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__tinia__datasource_create,mcp__tinia__datasource_update,mcp__tinia__datasource_delete,mcp__tinia__datasource_list_files,mcp__tinia__datasource_delete_file,mcp__tinia-file__upload_file_to_datasource,mcp__tinia__channel_template_list,mcp__tinia__channel_template_create,mcp__tinia__channel_template_apply,mcp__tinia__channel_template_delete,mcp__tinia__flow_create,mcp__tinia__flow_batch_edit,mcp__tinia__flow_run,mcp__tinia__flow_wait_run,mcp__tinia__flow_node_output_preview,Bash,mcp__tinia__datasource_types,mcp__tinia__datasource_browse_items,mcp__tinia__channel_semantics,mcp__tinia__channel_template_update
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # datasource-test —— 测试数据源 + 通道命名模板
@@ -17,14 +20,14 @@ allowed-tools: mcp__tinia__datasource_list,mcp__tinia__datasource_describe,mcp__
 
 ## 上传走本地 MCP（任何部署都可用）
 
-文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（esbuild bundle 跟 plugin 一起分发，零外部依赖）。原因：
+文件上传**不走远程 `tinia` MCP**，走 **本地 stdio MCP `tinia-file`**（由随 Tinia 分发的本地 MCP 程序 `tinia-local-mcp file` 提供，单二进制、不依赖 Node / Python）。原因：
 
 - 远程 MCP（连 Tinia Server）看不到 AI 本机文件 — 在 SaaS 部署直接没法上传
 - MCP 协议层 base64 内联占 AI context 太重 — 大 NVH 录音 OOM
 
-实现：plugin 装载时 `${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js`（symlink 到 `_shared/local-mcp/tinia-file-mcp/index.js`，esbuild bundle 单文件 ~500KB 含所有依赖）通过 `node` 启动 stdio。HTTP multipart 直传 server 现有的 `/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**（saas / onprem / 本地 dev）。
+实现：AI 客户端以 stdio 方式启动 `tinia-local-mcp file`（客户端配置里写 `tinia-local-mcp` 的绝对路径），HTTP multipart 直传 server 现有的 `/api/v1/datasources/:id/uploads` 端点，文件大小不受限。**任何部署模式都通用**（saas / onprem / 本地 dev）。
 
-源码：[Tinia_Local_MCP](https://github.com/bestfunc/Tinia_Local_MCP)（独立仓库），改动后 `npm run deploy` 自动同步到 plugins。
+旧版插件用的是 node 版：`${CLAUDE_PLUGIN_ROOT}/local-mcp/tinia-file-mcp/index.js`（esbuild bundle，源码在 [Tinia_Local_MCP](https://github.com/bestfunc/Tinia_Local_MCP)）通过 `node` 启动，工具名不变。
 
 工具名：`mcp__tinia-file__upload_file_to_datasource`
 

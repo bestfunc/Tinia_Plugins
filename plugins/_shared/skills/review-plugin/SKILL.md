@@ -4,6 +4,9 @@ display_name: 审批组织内插件提交
 description: 帮组织管理员审批待批的插件提交 —— 读元数据 / 检查代码安全性 / 据 Tinia 设计规范给意见 → 反问用户通过/拒绝 → 自动写拒绝理由
 user-invocable: true
 allowed-tools: mcp__tinia__plugin_review_pending,mcp__tinia__plugin_review_detail,mcp__tinia__plugin_review_read_file,mcp__tinia__plugin_review_grep_files,mcp__tinia__plugin_review_open,mcp__tinia__plugin_review_approve,mcp__tinia__plugin_review_reject
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 审批组织内插件提交

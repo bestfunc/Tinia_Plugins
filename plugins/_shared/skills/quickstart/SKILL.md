@@ -4,6 +4,9 @@ display_name: 快速上手 Tinia 插件开发
 description: 从零开始建项目、加节点、写 run.py、测试并发布的完整流程示例
 user-invocable: true
 allowed-tools: mcp__tinia__dev_list_projects,mcp__tinia__dev_create_project,mcp__tinia__dev_create_node,mcp__tinia__dev_read_file,mcp__tinia__dev_grep_files,mcp__tinia__dev_glob_files,mcp__tinia__dev_write_file,mcp__tinia__dev_edit_file,mcp__tinia__dev_reload,mcp__tinia__dev_bump_version,mcp__tinia__dev_export,mcp__tinia__nodes_list_types,mcp__tinia__nodes_list,mcp__tinia__nodes_describe,mcp__tinia__nodes_read_source,mcp__tinia__namespace_list
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 快速上手 Tinia 插件开发
@@ -81,6 +84,13 @@ nodes_read_source(key, "runtime/run.py")         # 学 SDK 调用习惯（不抄
 - `dev_bump_version`（1.0 → 1.1）
 - `dev_export` 拿到 tar.gz 的 base64 内容
 - 告诉用户"请下载后在 Tinia 的"节点仓库"页面点"离线安装"上传"
+
+## 多语言
+
+平台支持中/英/日，**中文是源语言**：照常写中文，译文旁挂在 `i18n/` 里，**可选**。
+写新节点时只需顺手做对两件事：`node.yaml` 填 `sub_name`（不拦发布，但一行换个英文节点名），
+`ui/*.tsx` 的中文用 `t(key, '中文原文')` 包一层（第二参数就是兜底，不写 json 也能跑）。
+详见 `create-node` / `node-yaml` skill 与主仓 `docs/i18n/plugin-i18n-quickstart.md`。
 
 ## 关键原则
 

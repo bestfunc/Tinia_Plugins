@@ -3,6 +3,9 @@ name: params-form
 display_name: 节点参数表单（下拉/开关/滑块/条件字段）
 description: 节点在图编辑器右侧参数面板怎么渲染 —— 默认只有输入框，想要下拉/开关/条件显示必须写 ui/ParamsForm.tsx
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # 节点参数表单：默认渲染 + 自定义 UI
@@ -256,6 +259,14 @@ const set = (k: string, v: any) => onChange({ ...params, [k]: v })
 
 永远整体替换（spread 保留其他字段），不要原地改 params 对象。
 
+> **这条写法还是平台「从表单点选」的基础**（Tinia v1.48+）：属性面板「参数」页会把你的表单
+> 渲染在一份副本上，接管 `onChange`，**比较前后差异**来认出用户想让外部覆盖的是哪个参数。
+> 所以：
+> - 一个控件只改它自己的那个参数；需要联动时（改目标值反推 n_fft）照常一起写，平台会把
+>   变化的几个都列出来让用户挑，并提示「这几个是联动的」；
+> - 挂载时在 `useEffect` 里补默认值/迁旧键可以，平台只认**用户动过之后**的回写；
+> - 别在 `onChange` 之外偷偷改状态让表单显示和 params 对不上 —— 点选看的是 params 的差异。
+
 ### 可用依赖（白名单）
 
 dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）：
@@ -271,12 +282,80 @@ dev 项目的 tsx 只允许 import 以下模块（其它会被 sandbox reject）
 | `@/lib/utils` | `cn`（Tailwind class 合并） |
 | `@/api/client` | `api.get` / `api.post` 等调 Tinia 主 API |
 | `@/lib/three-bundle` | three.js 聚合（THREE + OrbitControls + EffectComposer + Bloom，3D 视图用） |
+| `@/lib/i18n` | **节点 UI 多语言**：`useNodeT(nodeKey)` 拿作用域化的 `t`，`useNodeLocale()` 拿当前语言。用法见下方「多语言」一节 |
 | `@/lib/nodeParamsBus` | `publishNodeParams` —— 查看器里改了参数，回写给画布上的节点（如有效段查看器的「查看器内调参」） |
 | `@/lib/upstreamChannels` | `useUpstreamChannels(dsIds)` —— 列出上游数据源有哪些通道（名字/物理量/单位）供勾选，替代让人手输通道索引。画布把 `upstreamDsIds` 注入节点 data，表单直接传进来即可；拿不到时返回空数组 + `reason`，**必须**有手输回退路径 |
 | `@/components/ui/Select` | **下拉选择（shadcn 风格,表单首选）**：`Select / SelectTrigger / SelectValue / SelectContent / SelectItem / SelectGroup` |
 | `@/components/ui/SearchSelect` | 带搜索的下拉：`SearchSelect / SearchMultiSelect`（选项多时用,多选版带全选/反选） |
 | `@/components/ui/ColorPicker` | 取色：`ColorPicker`（色板/色盘 + 不透明度 + hex + 吸管 + 最近色） |
 | `@/components/ui/ContextMenu` | 右键菜单：`ContextMenu` + `CtxItem` 类型（条目式，给 items 数组）；内容要放任意 ReactNode 时用 `useContextMenu()` |
+| `@/components/ui/DateTimePicker` | 日期时间选择：`DateTimePicker`（月历 + 时分，default 导出）+ `parseLocalDT` / `toLocalDT` |
+| `@/components/ui/FieldHelp` | 参数旁的「?」帮助浮层：`FieldHelp`（default 导出，hover 展开 + 右上角一键复制）。长说明一律收进它 —— 见下方「说明写在哪」 |
+| `@/components/charts/ScatterExplorer` | 可探索的 2D 散点图：`ScatterExplorer`（default 导出；框选 / 滚轮缩放 / 拖拽平移 / 悬浮 / 点选 / 右键菜单，交互同「聚类探索」），外加 `SERIES_COLORS` / `escapeHtml` / `clip` / `themeColor`。点怎么分系列、悬浮显示什么由调用方给。⚠ 需要主程序 v1.48 及以上，更旧的主程序上这个 import 会编译失败、回落到打包时的旧界面 |
+
+### 说明写在哪（★ 表单文案的统一规矩）
+
+参数表单的说明越写越长，最后一屏里真正要填的控件被挤成零星几行，而那些说明
+**大部分时候不需要看**（填过一次就记住了）。所以：**长说明收进 `?`，表单上只留填得下去所必需的那句。**
+
+```tsx
+import FieldHelp from '@/components/ui/FieldHelp'
+
+<label className={labelCls}>
+  检查哪条曲线
+  <FieldHelp title="检查哪条曲线">
+    一份数据里可能同时有 <b>vs_time</b>（时序）和 <b>vs_freq</b>（频谱）……
+  </FieldHelp>
+</label>
+```
+
+| 留在表单上 | 收进 `?` |
+|---|---|
+| 当前选择的**即时后果**（一行，随选择变化） | 原理 / 算法出处 / 公式 |
+| 单位、取值范围 | 「为什么这么设计」 |
+| 错误与警告（红黄字） | 踩过的坑、反直觉之处 |
+| 一句话点题 | 与下游的契约、字段清单 |
+
+**判据：遮住 `?` 还能不能把这个参数填对。** 能 → 收得对；不能 → 那句话得留在外面。
+没有这条判据，最后会把所有字都塞进 `?`，表单变成一排没有信息的光板 ——
+那不是简化，是把问题挪了个地方。
+
+`FieldHelp` 自己已经处理好 portal（不被面板裁剪）、边界翻转（不跑出屏幕）、
+`zoom-stable`（界面缩放下不偏移）与鼠标在「? → 浮层」路上的连续性，直接用即可。
+样板见 `spec_limit_check` 的 `ui/ParamsForm.tsx`。
+
+### 多语言（可选，纯增量）
+
+表单里的中文**照常直接写**。想让它支持英日，把字面量换成 `t(key, 中文原文)`：
+
+```tsx
+import { useNodeT } from '@/lib/i18n'
+
+export default function ParamsForm({ params, onChange }) {
+  const t = useNodeT('level_meter')          // 传自己的节点目录名（裸 key）
+  return <label>{t('band.title', '频带设置')}</label>
+}
+```
+
+**第二个参数就是中文原文，也是永远的兜底。** 不写任何 json 也能正常跑（显示中文）；
+要支持英日，再在节点目录下补：
+
+```
+nodes/level_meter/i18n/
+├── ui.en.json     { "band": { "title": "Band settings" } }   ← 嵌套或 "band.title" 扁平写法都行
+└── ui.ja.json     { "band.title": "帯域設定" }
+```
+
+逐条目回落 `ja → en → 中文原文`：ja 只译了六成，剩下四成各自落 en，不会整体退回中文。
+中文界面下**不发任何请求**，零成本。
+
+写在 `nodes/shared/` 里的公共组件用 **`useSharedT()`（无参）**，词典落在
+**仓库级** `<repo>/i18n/ui.<locale>.json` —— 那批串是整仓共用的，不属于某个节点。
+回落链与占位符跟 `useNodeT` 完全一致。
+
+节点的 `name` / `description` / 端口 `label` / 参数 `title` 不在这里 ——
+它们走 `i18n/<locale>.yaml` 与 `i18n/params.<locale>.json`，
+由后端解析后随 `/object_info` 下发。完整规范见主仓 `docs/i18n/plugin-i18n-spec.md`。
 
 **下拉用法**（与标准 shadcn 一致）：
 
@@ -546,6 +625,19 @@ const inputCls = 'w-full h-8 bg-input border border-border rounded px-2 text-sm'
   "required": ["strategy", "count"]
 }
 ```
+
+**哪些参数不让外部覆盖**：节点默认所有 schema 参数都可以被「参数」口覆盖（见 node-yaml skill
+的 `param_override`）。改了会让结果/模型对不上、或必须跟别的参数一起改的，标
+`"x-tinia-overridable": false`：
+
+```json
+"mode":     { "type": "string", "enum": ["manual", "knots"], "x-tinia-overridable": false },
+"category": { "type": "string", "x-tinia-overridable": false }
+```
+
+典型：切换后要连带转换别的参数的「模式」、决定另一个参数取值范围的「类别」、
+由别的参数反推出来的派生值、训练产物 id。覆盖值会按 `enum` / `minimum` / `maximum` 校验，
+所以约束写进 schema 比只写在表单里更可靠。
 
 Python 侧永远用 `get` + 默认值兜底：
 

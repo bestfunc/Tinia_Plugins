@@ -3,6 +3,9 @@ name: types-reference
 display_name: Tinia 类型体系
 description: Tinia 节点图里的数据类型参考 — AudioData / IndicatorData / AnnotationLayer / Any / Dataset 等
 user-invocable: false
+metadata:
+  version: "1.5.0"
+  agentport-product: tinia
 ---
 
 # Tinia 类型体系

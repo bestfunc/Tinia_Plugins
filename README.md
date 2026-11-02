@@ -2,7 +2,7 @@
 
 Tinia 声学数据分析平台的 AI 开发助手 plugin 市场，支持 Claude Code / Qwen Code 等 CLI。
 
-一条命令接入 **16 个 AI skill + OAuth 自动授权的 MCP connector**，覆盖插件项目创建、节点脚手架生成、源码搜索、`run.py` 编写、分析流程搭建（事务批操作）、节点测试调试、版本管理、打包发布、审批等场景。MCP 认证走 OAuth，首次使用自动弹出 Tinia 浏览器授权页，无需手动配 token。
+一条命令接入 **23 个 AI skill + OAuth 自动授权的 MCP connector**，覆盖插件项目创建、节点脚手架生成、源码搜索、`run.py` 编写、分析流程搭建（事务批操作）、节点测试调试、版本管理、打包发布、审批等场景。MCP 认证走 OAuth，首次使用自动弹出 Tinia 浏览器授权页，无需手动配 token。
 
 **四个部署变体，按场景选一个**：
 
@@ -35,7 +35,8 @@ Tinia_Plugins/
 ├── .claude-plugin/
 │   └── marketplace.json              ← Marketplace 定义（列四个变体）
 ├── plugins/
-│   ├── _shared/skills/               ← 16 个 Skill（共享源，四个变体软链到这里）
+│   ├── _shared/skills/               ← 23 个 Skill（共享源，四个变体软链到这里）
+│   │   ├── about-tinia/
 │   │   ├── quickstart/
 │   │   ├── types-reference/
 │   │   ├── sdk-reference/
@@ -43,14 +44,20 @@ Tinia_Plugins/
 │   │   ├── tinia-repo-yaml/
 │   │   ├── create-node/
 │   │   ├── debug-node/
+│   │   ├── node-test/
 │   │   ├── modify-ports/
 │   │   ├── params-form/
 │   │   ├── result-view/
 │   │   ├── flow-author/
+│   │   ├── filter-design/
+│   │   ├── fetch-blob-output/
+│   │   ├── report-author/
 │   │   ├── publish-plugin/
 │   │   ├── review-plugin/
 │   │   ├── pack-and-publish/
 │   │   ├── datasource-plugin/
+│   │   ├── datasource-test/
+│   │   ├── composite-datasource/
 │   │   └── pick-template/
 │   ├── tinia/                        ← SaaS 版（tinia-saas.bestfunc.com）
 │   │   ├── .claude-plugin/plugin.json
@@ -134,7 +141,7 @@ Qwen Code 会自动把 Claude plugin 格式转成 Qwen extensions 格式并写�
 
 ### Windows 用户注意
 
-三个 plugin 目录的 `skills` 是 git symlink。Windows 下需要 git 配置 `core.symlinks=true`（开发者模式或 admin shell 下 `git clone` 默认会启用），否则 clone 出来 symlink 会变成普通文本文件。Claude Code 客户端不受影响，只是源码仓库 clone 后看着不对。
+四个 plugin 目录的 `skills` 是 git symlink。Windows 下需要 git 配置 `core.symlinks=true`（开发者模式或 admin shell 下 `git clone` 默认会启用），否则 clone 出来 symlink 会变成普通文本文件。Claude Code 客户端不受影响，只是源码仓库 clone 后看着不对。
 
 ## 更新
 
@@ -150,6 +157,7 @@ qwen extensions update tinia            # 或 tinia-onprem / tinia-local
 
 | Skill（目录名）| 中文名 | 用途 |
 |---|---|---|
+| `about-tinia` | Tinia 产品百科 | 产品定位 / 架构 / 部署形态 / 术语；会话开始先做版本自检 |
 | `quickstart` | 快速上手 Tinia 插件开发 | 从零到一的对话示例 |
 | `types-reference` | Tinia 类型体系 | AudioData / IndicatorData / ... 语义与兼容 |
 | `sdk-reference` | Tinia SDK 参考 | `tinia_runtime.Runtime` 所有方法 |
@@ -161,8 +169,14 @@ qwen extensions update tinia            # 或 tinia-onprem / tinia-local
 | `result-view` | 写 Viewer.tsx / ViewerLoader.tsx | 节点结果视图的 React 组件规范 |
 | `modify-ports` | 修改节点端口与参数 | 端口改动时的兼容性注意 |
 | `debug-node` | 调试节点运行错误 | 测试失败时的排查流程 |
+| `node-test` | 测试节点正确性 | 合成已知信号搭测试图，按行业标准验输出 |
 | `flow-author` | 用 AI 搭分析流程 | flow_batch_edit / 跑流程 / 看节点产物 |
+| `filter-design` | 设计滤波流程 | iir / fir / 计权滤波节点的场景化组合 |
+| `fetch-blob-output` | 拉取 blob 输出并解码导出 | fetch_blob 取内层 npz 矩阵 → CSV |
+| `report-author` | 出分析报告 | 挑模板 → 插节点输出 → 补文字 → 交付 |
 | `datasource-plugin` | 开发数据源插件 | `datasource_plugin` 模板专用 |
+| `datasource-test` | 测试数据源 + 通道命名模板 | 建数据源 / 上传 wav / 通道模板全链路验证 |
+| `composite-datasource` | 合成多通道数据源 | N 个 mono 数据源 stack 成多通道 |
 | `pack-and-publish` | 打包安装插件（离线） | 版本递进 + 导出 tar.gz 本地安装 |
 | `publish-plugin` | 发布插件到商店（在线） | OAuth 绑定 + draft → 用户提交审批 |
 | `review-plugin` | 审批插件 | 审核员视角：grep 源码 + 安全审查 SOP |
