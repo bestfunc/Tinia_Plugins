@@ -170,6 +170,7 @@ qwen extensions update tinia            # 或 tinia-onprem / tinia-local
 | `modify-ports` | 修改节点端口与参数 | 端口改动时的兼容性注意 |
 | `debug-node` | 调试节点运行错误 | 测试失败时的排查流程 |
 | `node-test` | 测试节点正确性 | 合成已知信号搭测试图，按行业标准验输出 |
+| `resource-browser` | 资源树与保护目录管理 | 五资源目录 CRUD、完整复制/移动、制品建仓与节点选择 |
 | `flow-author` | 用 AI 搭分析流程 | flow_batch_edit / 跑流程 / 看节点产物 |
 | `filter-design` | 设计滤波流程 | iir / fir / 计权滤波节点的场景化组合 |
 | `fetch-blob-output` | 拉取 blob 输出并解码导出 | fetch_blob 取内层 npz 矩阵 → CSV |
