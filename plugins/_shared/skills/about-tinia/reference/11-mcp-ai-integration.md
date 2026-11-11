@@ -122,7 +122,7 @@ OAuth 2.1 完整流程：
 
 ### 权限 / scope
 
-OAuth scope 控制工具可见性，scope = `mcp:<module>`，共 8 个，由 user_group 的 `permissions.mcp.<module>` 决定（超管全开）：
+OAuth scope 控制工具可见性，scope = `mcp:<module>`，由 user_group 的 `permissions.mcp.<module>` 决定（超管全开）。完整清单以服务端 `models.MCPAllModules` 为准：
 
 | Scope | 含义 |
 |---|---|
@@ -134,6 +134,8 @@ OAuth scope 控制工具可见性，scope = `mcp:<module>`，共 8 个，由 use
 | `mcp:templates` | 流程模板读写 |
 | `mcp:assistant` | 助手类工具 |
 | `mcp:plugins` | 商店发布 / 审批 |
+| `mcp:shared_envs` | 共享 Python 环境：列表/详情/未分配/预览/任务查询（阶段 1 后端，超管） |
+| `mcp:shared_envs_write` | 共享 Python 环境：创建/移动/独立移除/改名容量/删除/取消重试（阶段 1 不启动 worker、不预热） |
 
 用户授权时勾选 scope，AI 客户端只能用授权范围内的工具。
 
