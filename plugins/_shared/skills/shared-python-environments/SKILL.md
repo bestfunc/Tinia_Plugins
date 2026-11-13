@@ -1,7 +1,7 @@
 ---
 name: shared-python-environments
 display_name: 共享 Python 环境
-description: 帮管理员查看/创建/调整 Tinia 共享 Python 环境：完整依赖解析与分组预览、目标锁定版本优先的强制合并、节点移出到独立执行、容量 N、后台构建发布与失败重试。阶段 2 起已启动固定 N 共享 worker；本 skill 覆盖运行态查看与 CPU worker 重启，不含模型预热与 GPU 重启。
+description: 帮管理员查看/创建/调整 Tinia 共享 Python 环境：完整依赖解析与分组预览、目标锁定版本优先的强制合并、节点移出到独立执行、容量 N、后台构建发布与失败重试。阶段 2 起已启动固定 N 共享 worker；本 skill 覆盖运行态查看与共享执行环境重启，不负责配置模型/流程预热。
 user-invocable: true
 allowed-tools: mcp__tinia__shared_env_list,mcp__tinia__shared_env_get,mcp__tinia__shared_env_unassigned_nodes,mcp__tinia__shared_env_preview_create,mcp__tinia__shared_env_create,mcp__tinia__shared_env_preview_move,mcp__tinia__shared_env_move_nodes,mcp__tinia__shared_env_preview_remove,mcp__tinia__shared_env_remove_nodes,mcp__tinia__shared_env_update,mcp__tinia__shared_env_delete,mcp__tinia__shared_env_job_get,mcp__tinia__shared_env_job_cancel,mcp__tinia__shared_env_job_retry,mcp__tinia__shared_env_runtime_status,mcp__tinia__shared_env_restart
 metadata:
@@ -25,7 +25,7 @@ metadata:
 
 - 会做：依赖解析、分组/合并/移除预览、不可变修订、成员归属、后台构建验证与原子发布；**每环境按容量 N 启动固定数量的共享 worker**，同一 worker 按可信 node key 串行分发多节点；未绑定节点仍走 one-shot。
 - 容量 N 是严格上限：满载排队、不回落 one-shot、不临时 N+1。空成员环境 0 worker。
-- 不会做：模型预热/流程预热（P3）、GPU sidecar 重启（P3）、管理 UI（P4）。`shared_env_restart` 只重启 CPU worker，返回里会说明范围。
+- 不会做：配置模型/流程预热、管理 UI。`shared_env_restart` 的全量范围已包含 CPU+GPU；指定环境只覆盖所选 CPU 池，以任务 scope/gpu_included 及实际结果为准。
 - 验证结果分：依赖（安装 + pip check + 锁核对）、导入（按 metadata 的 top_level 真实导入）、语法（`py_compile`）、共享入口快照/预检。**语法/依赖通过不等于算法兼容已验证**。
 - 同名纯 Python 私有 helper 由每节点唯一前缀命名空间隔离，可同环境共存；同名私有原生扩展、反射裸 `sys.modules`、外部文件加载等明确不支持共享执行，会在构建/发布前预检阶段说明并阻止。
 
@@ -99,16 +99,16 @@ shared_env_remove_nodes {env_id, preview_id, preview_fingerprint?, approve_targe
 - 重试：`shared_env_job_retry {op_id}`，只对 failed/cancelled/stale；会新建修订和新构建目录，并重新校验节点快照与原归属。
 
 
-## 阶段 2：运行态与重启
+## 运行态与重启
 
 ```
 shared_env_runtime_status {env_id?}
   → 每环境 state、capacity、actual_slots、ready/busy/starting/dying/backoff/degraded、
     queue_depth、oldest_wait_ms、reserved_env/reserved_g、active_op、last_error、
-    gpu_scope="excluded"、gpu_kernel_unpinned。
+    gpu_scope=none/fixed_revision/unverified、gpu_kernel_unpinned（仅固定修订身份诊断）。
   → 只有全部槽位 ready 且无缺槽/漂移才显示 ready；否则是 degraded/过渡态。
 
-shared_env_restart {env_id?} 或 {env_ids:[...]}   // 空 = 全部 CPU 共享环境
+shared_env_restart {env_id?} 或 {env_ids:[...]}   // 无 env_id 且 env_ids 空 = CPU+GPU 全量
   → 返回 op_id；串行、每环境独立结果。
   → 用 shared_env_job_get 读 env_ids / results：
      succeeded / partial / failed / cancelled，以及每环境 skipped_busy 等原因。
@@ -118,7 +118,7 @@ shared_env_restart {env_id?} 或 {env_ids:[...]}   // 空 = 全部 CPU 共享环
     总体为 partial（单环境停旧前取消可返回 cancelled），不会伪装成全部成功。
 
 重启范围
-  - 只重启 CPU 共享 worker；GPU sidecar/宿主不在本阶段，返回中明确 excluded。
+  - 默认/全部 scope=all：统一排空并重启 CPU 共享池与 GPU sidecar，再恢复有效且已确认的预热配置；指定 env_id/非空 env_ids 为 scope=envs，仅所选 CPU 池。用 job_get 核 gpu_included/gpu_error/recovery_error，不能把 partial/failed 当全部成功。
   - 取消：停旧之前可撤销；已开始停旧后必须完成恢复，只有环境真正 ready 才显示 cancelled，
     否则 failed。不要把"取消"说成已回滚。
 ```
@@ -128,8 +128,8 @@ shared_env_restart {env_id?} 或 {env_ids:[...]}   // 空 = 全部 CPU 共享环
 | 读数 | 对用户说 |
 |---|---|
 | `degraded` + `backoff_slots>0` | 某 worker 启动/补位失败，正在退避；队列会等，不会回落 one-shot |
-| `gpu_scope="excluded"` | 本阶段 restart 只覆盖 CPU worker；GPU sidecar 未重启 |
-| `gpu_kernel_unpinned=true` | 该环境有 GPU kernel 节点，但 kernel 仍由 sidecar 按原路径加载，P3 才钉住 |
+| `gpu_scope` | none=确认无 GPU 成员；fixed_revision=固定 manifest/bundle 身份匹配；unverified=无法确认。该字段不是 restart scope |
+| `gpu_kernel_unpinned=true` | 固定 GPU 身份证据缺失或无法确认；false 也不证明模型已加载/受保护，执行仍受 manifest/lease guard 约束 |
 | `dying_slots>0` | 旧进程已 kill、尚未回收，仍计入 N；此时不会起第 N+1 个 |
 | `queue_depth>0` | 环境满载，任务在排队；可取消对应流程（`oldest_wait_ms` 是最老等待） |
 | `reserved_env/reserved_g>0` | 有流式 run 预占容量；切换/restart 前需要先结束或取消该流程 |
@@ -154,3 +154,5 @@ shared_env_restart {env_id?} 或 {env_ids:[...]}   // 空 = 全部 CPU 共享环
 | 403 | 缺 scope 或不是超管，请管理员授权 |
 | job failed | 先看 status/detail_json：构建/验证失败时归属未变；若 `attribution:"published"` 则是 DB 已发布但 runtime 提交/恢复失败，归属以新修订为准、环境 degraded，不要说成已回滚 |
 | pip < 22.2 | 解析需要带 pip>=22.2 的目标解释器；不要改系统 pip |
+
+预热状态边界：仅有效组织归属、已确认且代次一致的配置可执行。GPU 预算不足明确报错，不淘汰受保护模型；loaded 不等于 protected，旧 hot 不代表本次 job 成功。具体预加载配置/取消用对应产品接口，不在本 skill 新增工具权限；cleanup_pending 仍待真实清理 ACK。
