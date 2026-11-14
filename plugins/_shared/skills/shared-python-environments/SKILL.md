@@ -1,11 +1,11 @@
 ---
 name: shared-python-environments
 display_name: 共享 Python 环境
-description: 帮管理员查看/创建/调整 Tinia 共享 Python 环境：完整依赖解析与分组预览、目标锁定版本优先的强制合并、节点移出到独立执行、容量 N、后台构建发布与失败重试。阶段 2 起已启动固定 N 共享 worker；本 skill 覆盖运行态查看与共享执行环境重启，不负责配置模型/流程预热。
+description: 帮管理员查看/创建/调整 Tinia 共享 Python 环境：完整依赖解析与分组预览、目标锁定版本优先的强制合并、节点移出到独立执行、容量 N、后台构建发布与失败重试。阶段 2 起已启动固定 N 共享 worker；本 skill 同时管理流程预热配置、确认、运行态与取消，以及共享环境 CPU/GPU 统一重启。
 user-invocable: true
-allowed-tools: mcp__tinia__shared_env_list,mcp__tinia__shared_env_get,mcp__tinia__shared_env_unassigned_nodes,mcp__tinia__shared_env_preview_create,mcp__tinia__shared_env_create,mcp__tinia__shared_env_preview_move,mcp__tinia__shared_env_move_nodes,mcp__tinia__shared_env_preview_remove,mcp__tinia__shared_env_remove_nodes,mcp__tinia__shared_env_update,mcp__tinia__shared_env_delete,mcp__tinia__shared_env_job_get,mcp__tinia__shared_env_job_cancel,mcp__tinia__shared_env_job_retry,mcp__tinia__shared_env_runtime_status,mcp__tinia__shared_env_restart
+allowed-tools: mcp__tinia__shared_env_list,mcp__tinia__shared_env_get,mcp__tinia__shared_env_unassigned_nodes,mcp__tinia__shared_env_preview_create,mcp__tinia__shared_env_create,mcp__tinia__shared_env_preview_move,mcp__tinia__shared_env_move_nodes,mcp__tinia__shared_env_preview_remove,mcp__tinia__shared_env_remove_nodes,mcp__tinia__shared_env_update,mcp__tinia__shared_env_delete,mcp__tinia__shared_env_job_get,mcp__tinia__shared_env_job_cancel,mcp__tinia__shared_env_job_retry,mcp__tinia__shared_env_runtime_status,mcp__tinia__shared_env_restart,mcp__tinia__preload_flow_list,mcp__tinia__preload_flow_changes,mcp__tinia__preload_flow_add,mcp__tinia__preload_flow_confirm,mcp__tinia__preload_flow_update,mcp__tinia__preload_flow_remove,mcp__tinia__preload_flow_refresh,mcp__tinia__preload_warm_job,mcp__tinia__preload_warm_cancel,mcp__tinia__preload_runtime_status
 metadata:
-  version: "1.6.0"
+  version: "1.7.0"
   agentport-product: tinia
 ---
 
@@ -18,6 +18,7 @@ metadata:
 - 用户想把节点移出共享环境、回到独立执行
 - 用户要改环境名称 / 每环境进程容量 N，或查看/取消/重试后台构建
 - 构建失败、计划过期、目标版本要变化时
+- 用户明确要为有权限的固定流程版本配置、确认、停用、重排或取消 CPU/GPU 预热
 
 ## 先读边界（必须对用户说清楚）
 
@@ -25,16 +26,17 @@ metadata:
 
 - 会做：依赖解析、分组/合并/移除预览、不可变修订、成员归属、后台构建验证与原子发布；**每环境按容量 N 启动固定数量的共享 worker**，同一 worker 按可信 node key 串行分发多节点；未绑定节点仍走 one-shot。
 - 容量 N 是严格上限：满载排队、不回落 one-shot、不临时 N+1。空成员环境 0 worker。
-- 不会做：配置模型/流程预热、管理 UI。`shared_env_restart` 的全量范围已包含 CPU+GPU；指定环境只覆盖所选 CPU 池，以任务 scope/gpu_included 及实际结果为准。
+- 可管理流程预热配置；不会执行模型训练或创建管理 UI。`shared_env_restart` 的全量范围已包含 CPU+GPU；指定环境只覆盖所选 CPU 池，以任务 scope/gpu_included 及实际结果为准。
 - 验证结果分：依赖（安装 + pip check + 锁核对）、导入（按 metadata 的 top_level 真实导入）、语法（`py_compile`）、共享入口快照/预检。**语法/依赖通过不等于算法兼容已验证**。
 - 同名纯 Python 私有 helper 由每节点唯一前缀命名空间隔离，可同环境共存；同名私有原生扩展、反射裸 `sys.modules`、外部文件加载等明确不支持共享执行，会在构建/发布前预检阶段说明并阻止。
 
 ## 权限
 
 - 只读工具需要 `mcp:shared_envs`；变更工具需要 `mcp:shared_envs_write`。
-- 所有工具还要求调用者是**超级管理员**；被拒时如实告诉用户缺哪个 scope / 权限，不要重试猜测。
+- 预热只读工具需要 `mcp:preload`，变更工具需要 `mcp:preload_write`；不能借共享环境 scope 替代。
+- 所有工具还要求调用者是**超级管理员**，预热仍经服务层组织与图权限校验；被拒时如实告诉用户缺哪个 scope / 权限，不要重试猜测。
 
-## 标准动作链
+## 共享环境标准动作链
 
 先核对当前会话的授权范围。用户已明确授权相应创建、移动或配置调整时，完成预览并在该范围内执行，不重复索要确认；未授权的目标版本变化等额外影响，先展示具体预览再请求批准。审批字段必须反映实际授权，不能为绕过校验而填写。
 
@@ -138,9 +140,9 @@ shared_env_restart {env_id?} 或 {env_ids:[...]}   // 无 env_id 且 env_ids 空
 ## 不能做的事
 
 - 不要自己拼 requirements、改节点源码或改节点原依赖声明；平台只记录有效覆盖。
-- 不要跳过 preview 直接 confirm；confirm 只接受服务端 `preview_id`。
+- 共享环境创建、移动、移除必须按对应 preview 确认并使用服务端 preview_id；此规则不适用于接收 flow_id 的 `preload_flow_confirm`。
 - 不要把 `preview` 的候选 `id` 或 `fingerprint` 当作可以手改的字段。
-- 不要在阶段 2 声称模型已预热或 GPU 已重启（P3）；只描述 worker 是否 ready。
+- 环境 worker ready 及 gpu_scope 本身不证明预热或 GPU 重启成功；分别以 preload 真实状态和 restart 任务 scope/results 判定。
 - 不要把 restart-all 的 partial 说成全部成功；逐环境读 detail_json。
 - 遇到 stale（409）就重新 preview，并把变化点告诉用户，不要反复重试同一个 preview_id。
 
@@ -155,4 +157,23 @@ shared_env_restart {env_id?} 或 {env_ids:[...]}   // 无 env_id 且 env_ids 空
 | job failed | 先看 status/detail_json：构建/验证失败时归属未变；若 `attribution:"published"` 则是 DB 已发布但 runtime 提交/恢复失败，归属以新修订为准、环境 degraded，不要说成已回滚 |
 | pip < 22.2 | 解析需要带 pip>=22.2 的目标解释器；不要改系统 pip |
 
-预热状态边界：仅有效组织归属、已确认且代次一致的配置可执行。GPU 预算不足明确报错，不淘汰受保护模型；loaded 不等于 protected，旧 hot 不代表本次 job 成功。具体预加载配置/取消用对应产品接口，不在本 skill 新增工具权限；cleanup_pending 仍待真实清理 ACK。
+预热状态边界：仅有效组织归属、已确认且代次一致的配置可执行。GPU 预算不足明确报错，不淘汰受保护模型；loaded 不等于 protected，旧 hot 不代表本次 job 成功。预加载配置/取消使用下列 preload_* 工具及独立 preload scope；cleanup_pending 仍待真实清理 ACK。
+
+## 流程预热：实际工具与示例
+
+先确认用户意图涵盖该固定图版本的预热，并用 `preload_flow_list {}` 查看当前配置，避免重复新增。
+预热没有 preview 工具；上面的 shared_env_preview_* 只预览环境依赖分组，不能冒充预热计划。
+
+- 新增：`preload_flow_add {"graph_id":<有权限的固定图ID>}`，返回的配置 `id` 记作 F。**新 Add 本身就是显式管理确认**，固化组织/确认人/代次并异步启动；不能声称必须再 confirm 才首次执行。
+- 旧未确认配置：`preload_flow_confirm {"flow_id":F}`。它接 flow_id，不接 preview_id；enable 不能绕过确认门禁。
+- 查询本次任务：`preload_warm_job {"flow_id":F}`；查询真实状态：`preload_runtime_status {"flow_id":F}`。刚受理时任务可暂空，有界查询至本次终态，不用旧 hot 冒充本次成功。省略 runtime 的 flow_id 或传 0 查询全部。
+- 查询变更：`preload_flow_changes {"flow_id":F}`。
+- 启停/顺序：`preload_flow_update {"flow_id":F,"enabled":false}` 或 `{"flow_id":F,"sort_order":<顺序整数>}`。按返回值观察新代次和清理状态；停用解除本 owner，不承诺模型物理立即卸载。
+- 取消运行中预热：`preload_warm_cancel {"flow_id":F}`，再查询本次 job/runtime。取消不删除配置，不撤其他 owner 或旧有效保护；cleanup_pending/错误表示清理仍未 ACK。
+- 显式重新预热：`preload_flow_refresh {"flow_id":F}`。没有 preload_job_retry，不能用 shared_env_job_retry 重试 warm。
+- 删除：`preload_flow_remove {"flow_id":F}`。真实清理 ACK 成功才删除；失败保留配置/待清资源，不把请求受理说成删除完成。
+
+最小链：list → 用户明确新增时 add 并取 F（已有旧行则按需 confirm）→ warm_job/runtime 观察本次任务与 CPU/GPU 分态。
+job 查询和取消的参数始终是 **flow_id**，不是 warm_job.id 或共享环境 op_id。
+现有可选 replicas 不是共享池容量 N，示例省略它；CPU 预热覆盖实际完整 N，GPU 同内容共享只以兼容加载身份和真实驻留为准。
+保护驻留不足必须明确报错，不淘汰其他有效 owner 的受保护模型；CPU/GPU 失效独立计算，loaded 不证明 protected。
